@@ -6,7 +6,7 @@ import "../popup"
 BarPopup {
     id: popup
 
-    popupWidth: 300
+    popupWidth: 310
 
     // Icon style used by this popup's icons. Defaults to Theme.iconStyle.
     property string iconStyle: Theme.iconStyle

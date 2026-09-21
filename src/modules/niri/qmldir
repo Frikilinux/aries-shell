@@ -1,0 +1,2 @@
+module modules.niri
+singleton Niri 1.0 Niri.qml

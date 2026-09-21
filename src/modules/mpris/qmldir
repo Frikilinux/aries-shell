@@ -1,0 +1,3 @@
+module modules.mpris
+Mpris 1.0 Mpris.qml
+MprisPopup 1.0 MprisPopup.qml

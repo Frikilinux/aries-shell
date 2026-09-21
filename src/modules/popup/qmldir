@@ -1,0 +1,3 @@
+module modules.popup
+singleton Popups 1.0 Popups.qml
+BarPopup 1.0 BarPopup.qml

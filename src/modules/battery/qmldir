@@ -1,0 +1,4 @@
+module modules.battery
+singleton BatteryService 1.0 BatteryService.qml
+Battery 1.0 Battery.qml
+BatteryPopup 1.0 BatteryPopup.qml

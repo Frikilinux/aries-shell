@@ -1,0 +1,4 @@
+module modules.network
+singleton NetworkDevices 1.0 NetworkDevices.qml
+Network 1.0 Network.qml
+NetworkPopup 1.0 NetworkPopup.qml

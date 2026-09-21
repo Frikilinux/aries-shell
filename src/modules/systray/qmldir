@@ -1,0 +1,6 @@
+module modules.systray
+Systray 1.0 Systray.qml
+TrayItem 1.0 TrayItem.qml
+TrayIcon 1.0 TrayIcon.qml
+TrayMenu 1.0 TrayMenu.qml
+MenuRow 1.0 MenuRow.qml

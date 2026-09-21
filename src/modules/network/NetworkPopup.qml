@@ -503,12 +503,10 @@ BarPopup {
                             anchors.leftMargin: 8
                             anchors.verticalCenter: parent.verticalCenter
                             horizontalAlignment: Text.AlignHCenter
-                            glyph: section.isWifi ? "\ue077" : "\ue075" // wifi-logo / ethernet
+                            glyph: section.isWifi ? "" : "\ue075" // ethernet (wifi-logo removed)
                             style: popup.iconStyle
                             color: section.connected ? Theme.accentColor : Theme.fgColor
                             opacity: section.connected ? 1 : 0.6
-                            // The wifi-logo is a detailed wordmark: it needs to be
-                            // larger than the plain ethernet glyph to stay legible.
                             font.pixelSize: Math.round(Theme.iconSize * 1.3)
                         }
 
@@ -574,13 +572,11 @@ BarPopup {
                             anchors.margins: 6
                             spacing: 8
 
-                            Icon {
-                                anchors.verticalCenter: parent.verticalCenter
+                            // Tick removed; the 18px slot is kept so the text
+                            // stays aligned with the signal icon on the right.
+                            Item {
                                 width: 18
-                                horizontalAlignment: Text.AlignHCenter
-                                glyph: "\ue029" // checkmark-circle
-                                style: popup.iconStyle
-                                color: Theme.accentColor
+                                height: 1
                             }
 
                             Column {

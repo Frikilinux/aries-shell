@@ -9,7 +9,7 @@ import "../theme"
 // declared on an instance are laid out in the content column.
 //
 // Popups are layer-shell surfaces (not xdg popups): a `PanelWindow` on the
-// overlay layer with namespace "z-shell-popup". This lets niri shadow them via
+// overlay layer with namespace "aries-popup". This lets niri shadow them via
 // a layer rule (niri renders no compositor shadows for xdg popups) and avoids
 // the `popups {}` blocks, which only apply to real xdg popups. Position rides
 // on the layer-shell margins (anchored to the screen's top-left).
@@ -62,7 +62,7 @@ PanelWindow {
     }
 
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "z-shell-popup"
+    WlrLayershell.namespace: "aries-popup"
     // Accept keys while the popup is open (e.g. the Wi-Fi password prompt).
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 

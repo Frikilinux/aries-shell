@@ -1,0 +1,4 @@
+module modules.offpeak
+singleton OffpeakService 1.0 OffpeakService.qml
+Offpeak 1.0 Offpeak.qml
+OffpeakPopup 1.0 OffpeakPopup.qml

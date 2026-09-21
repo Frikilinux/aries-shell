@@ -14,7 +14,7 @@ import "../popup"
 //    Backdrop surfaces ignore ALL input, so popup dismissal can never live here
 //    — that's what the scrim surface is for.
 //
-//  * scrim (Bottom layer, ns "z-shell-scrim"): transparent click-catcher shown
+//  * scrim (Bottom layer, ns "aries-scrim"): transparent click-catcher shown
 //    only while a popup/tray menu is open, closing it on a real outside click.
 //    Formerly the standalone PopupScrim; kept below windows so window clicks
 //    still reach the windows.
@@ -141,7 +141,7 @@ Item {
         visible: Popups.current !== null
 
         WlrLayershell.layer: WlrLayer.Bottom
-        WlrLayershell.namespace: "z-shell-scrim"
+        WlrLayershell.namespace: "aries-scrim"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         // Full-desktop surface must not push any window out of the way.
         WlrLayershell.exclusiveZone: 0

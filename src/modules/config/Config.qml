@@ -7,8 +7,8 @@ import Quickshell.Io
 // User configuration for the bar.
 //
 // Settings live in a JSON file (default:
-// `$XDG_CONFIG_HOME/zshell/config.json`, falling back to
-// `~/.config/zshell/config.json`). On startup the file and its parent
+// `$XDG_CONFIG_HOME/aries/config.json`, falling back to
+// `~/.config/aries/config.json`). On startup the file and its parent
 // directory are created if missing, filled with the hardcoded defaults below.
 // Values from the file are merged over those defaults (the user's values win;
 // unknown keys are ignored). A broken/empty file falls back to the defaults.
@@ -64,7 +64,7 @@ Singleton {
         const xdg = Quickshell.env("XDG_CONFIG_HOME")
         const home = Quickshell.env("HOME")
         const base = xdg ? ("" + xdg) : ((home ? "" + home : "") + "/.config")
-        return base + "/zshell"
+        return base + "/aries"
     }
     readonly property string configPath: root.configDir + "/config.json"
 
@@ -97,6 +97,8 @@ Singleton {
           buttonBorder: "#3d444db3",
           accent: "#478be6",
           urgent: "#e0af68",
+          offPeak: "#3fb950",
+          peak: "#f85149",
           popupBorder: "#3d444db3",
           popupRadius: 13,
           popupBorderWidth: 1
@@ -118,6 +120,7 @@ Singleton {
                             longitude: "-60.4",
                             units: "metric" },
             power:        { outputs: ["primary"] },
+            offpeak:      { outputs: ["primary"] },
             wallpaper:    { outputs: "*",
                             path: "",
                             fillMode: "crop",

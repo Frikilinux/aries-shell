@@ -6,7 +6,7 @@ import "../popup"
 
 // Context menu for a system tray item. Like BarPopup, it is a layer-shell
 // surface (not an xdg popup): a `PanelWindow` on the overlay layer with the
-// "z-shell-popup" namespace, so niri gives it the same compositor shadow and
+// "aries-popup" namespace, so niri gives it the same compositor shadow and
 // rounded-corner geometry as the bar popups. The root instance drops below the
 // bar centered on its tray icon; submenu instances fly out beside the row that
 // opened them. Displayed content is the QsMenuEntry tree from the item's DBus
@@ -66,7 +66,7 @@ PanelWindow {
     }
 
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "z-shell-popup"
+    WlrLayershell.namespace: "aries-popup"
     // OnDemand at rest; briefly flicked to Exclusive on show to grab keyboard
     // focus (replacing PopupWindow's grabFocus, which layer surfaces lack).
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand

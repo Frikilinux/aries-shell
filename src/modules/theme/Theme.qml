@@ -36,6 +36,9 @@ Singleton {
     readonly property real bgOpacity: Config.settings.colors.bgOpacity
     readonly property color accentColor: Config.settings.colors.accent
     readonly property color urgentColor: Config.settings.colors.urgent
+    // Off-peak / peak indicator colors (DeepSeek API off-peak pricing)
+    readonly property color offPeakColor: Config.settings.colors.offPeak
+    readonly property color peakColor: Config.settings.colors.peak
     readonly property color popupBorderColor: Config.settings.colors.popupBorder
 
     // Button/pill colors (used by e.g. the bluetooth device flags)

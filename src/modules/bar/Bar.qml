@@ -15,7 +15,7 @@ PanelWindow {
     property real spacing: Config.settings.bar.spacing
 
     // Wayland layer-shell namespace reported by compositors (e.g. niri msg layers)
-    WlrLayershell.namespace: "z-shell"
+    WlrLayershell.namespace: "aries"
 
     // Allow the bar to take keyboard focus on click so that popups with text
     // inputs (e.g. the Wi-Fi password prompt) can receive keystrokes.

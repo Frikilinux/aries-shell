@@ -19,6 +19,7 @@ import "modules/power"
 import "modules/systray"
 import "modules/volume"
 import "modules/weather"
+import "modules/offpeak"
 import "modules/wallpaper"
 
 ShellRoot {
@@ -50,6 +51,10 @@ ShellRoot {
                     }
 
                     right: [
+                        Offpeak {
+                            output: modelData.name
+                            outputs: Config.outputs(Config.revision, "offpeak", modelData.name)
+                        },
                         Systray {
                             output: modelData.name
                             outputs: Config.outputs(Config.revision, "systray", modelData.name)

@@ -19,7 +19,7 @@ Singleton {
     }
     readonly property string iconFont: iconFontLoader.name
 
-    property string iconStyle: "solid" // Unused with IconFont (single style); kept for config compat
+    property string iconStyle: "solid" // Unused with the icon font (single style); kept for config compat
     readonly property int iconSize: 18
 
     // Uniform gap between bar modules and between the icons inside a module

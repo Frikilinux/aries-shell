@@ -4,11 +4,11 @@ import "../theme"
 Text {
     id: icon
 
-    // A glyph from the custom IconFont (assets/iconfont.ttf), e.g. "\ue024".
+    // A glyph from the custom icon font `aries-shell` (assets/iconfont.ttf), e.g. "\ue024".
     // The font is self-assembled from SVGs; see Theme.qml for the loaded file.
     property string glyph
 
-    // Deprecated no-op kept for config/API compatibility (IconFont is single-style)
+    // Deprecated no-op kept for config/API compatibility (the icon font is single-style)
     property string style: Theme.iconStyle
     // Deprecated no-op kept for API compatibility
     property bool brands: false

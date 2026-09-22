@@ -313,12 +313,34 @@ BarPopup {
         }
     }
 
-    // Header: title + global Wi-Fi toggle + connection editor + close
+    // Internet reachability is a system-global NetworkManager value, not a
+    // per-device one, so it lives in the popup header only. Only anomalies
+    // are shown: `Full` / `Unknown` render nothing.
+    function connectivityLabel(conn) {
+        switch (conn) {
+        case NetworkConnectivity.None:
+            return "No internet"
+        case NetworkConnectivity.Portal:
+            return "Portal"
+        case NetworkConnectivity.Limited:
+            return "Limited"
+        default:
+            return ""
+        }
+    }
+
+    function connectivityColor(conn) {
+        return conn === NetworkConnectivity.Portal
+            ? Theme.accentColor : Theme.urgentColor
+    }
+
+    // Header: title + connectivity status + connection editor + close
     Item {
         width: parent.width
         height: 26
 
         Text {
+            id: headerTitle
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             text: "Networks"
@@ -326,6 +348,18 @@ BarPopup {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSize
             font.bold: true
+        }
+
+        Text {
+            id: connectivityBadge
+            anchors.left: headerTitle.right
+            anchors.leftMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            text: popup.connectivityLabel(Networking.connectivity)
+            visible: text !== ""
+            color: popup.connectivityColor(Networking.connectivity)
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize - 3
         }
 
         Row {

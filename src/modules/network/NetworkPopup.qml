@@ -688,7 +688,7 @@ BarPopup {
                                     width: 18
                                     horizontalAlignment: Text.AlignHCenter
                                     glyph: "\ue037" // sign-out = leave/forget
-                                    color: Theme.urgentColor
+                                    color: Theme.fgColorMuted
                                     opacity: apRow.canForget && apMouse.containsMouse ? 1 : 0
                                     MouseArea {
                                         anchors.fill: parent

@@ -25,41 +25,23 @@ Item {
     readonly property bool hasWifi: wifiDevices.length > 0
     readonly property bool hasWired: wiredDevices.length > 0
 
-    function isUp(dev) {
-        if (dev.connected)
-            return true
-        return dev.networks.values.some(n => n.connected)
-    }
-
-    // First connected device (internal preferred). If none is connected, fall
-    // back to the first device so its off/disabled state is still represented.
-    function activeDevice(list) {
-        if (list.length === 0)
-            return null
-        const up = list.find(d => network.isUp(d))
-        return up === undefined ? list[0] : up
-    }
-
-    readonly property var activeWifi: activeDevice(wifiDevices)
-    readonly property var activeWired: activeDevice(wiredDevices)
-    readonly property bool wifiConnected: activeWifi !== null && isUp(activeWifi)
-    readonly property bool wiredConnected: activeWired !== null && isUp(activeWired)
+    readonly property var activeWifi: NetworkDevices.activeDevice(wifiDevices)
+    readonly property var activeWired: NetworkDevices.activeDevice(wiredDevices)
+    readonly property bool wifiConnected: NetworkDevices.isUp(activeWifi)
+    readonly property bool wiredConnected: NetworkDevices.isUp(activeWired)
+    // Carrier present even with no active connection (dimmer, not "off").
+    readonly property bool wiredLinked: activeWired !== null && activeWired.hasLink
+    // rfkill switch (sw) or the radio itself (hw) turned off.
+    readonly property bool wifiOff: !Networking.wifiEnabled
+        || !Networking.wifiHardwareEnabled
 
     readonly property string wifiGlyph: {
-        if (activeWifi !== null && network.wifiConnected) {
-            const n = activeWifi.networks.values.find(x => x.connected)
-            if (n !== undefined) {
-                const s = n.signalStrength
-                if (s >= 0.75)
-                    return "\ue065" // wifi4
-                if (s >= 0.50)
-                    return "\ue064" // wifi3
-                if (s >= 0.25)
-                    return "\ue063" // wifi2
-                return "\ue062"     // wifi1
-            }
+        if (wifiConnected) {
+            const n = NetworkDevices.connectedNetwork(activeWifi)
+            if (n !== null)
+                return NetworkDevices.signalGlyph(n.signalStrength)
         }
-        if (!Networking.wifiEnabled)
+        if (wifiOff)
             return "\ue067" // wifi-off
         return "\ue069"     // wifi-warning (enabled, not connected)
     }
@@ -79,7 +61,7 @@ Item {
             glyph: "\ue075" // ethernet
             style: network.iconStyle
             color: Theme.fgBarColor
-            opacity: network.wiredConnected ? 1 : 0.45
+            opacity: network.wiredConnected ? 1 : (network.wiredLinked ? 0.7 : 0.45)
         }
 
         Icon {

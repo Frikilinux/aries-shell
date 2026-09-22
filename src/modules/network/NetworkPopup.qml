@@ -15,7 +15,7 @@ BarPopup {
     // Never taller than 75% of the screen height.
     maxContentHeight: popup.screen ? Math.round(popup.screen.height * 0.75) : 540
 
-    readonly property var devices: Networking.devices.values
+    readonly property var devices: NetworkDevices.devices
     // Ordered internal-first: eth internal, eth external, wifi internal, wifi external.
     readonly property var deviceSections: NetworkDevices.ordered
 
@@ -26,12 +26,14 @@ BarPopup {
     readonly property int apRowSpacing: 2
 
     // ------------------------------------------------------------------
-    // Per-device/AP extra info read from `iw` + `nmcli`
+    // Extra link info Quickshell.Networking does not expose, read from
+    // `iw` + `nmcli` (freq / width / bitrate / signal / IPv4 / per-AP band).
+    // SSID, security, signal, connected, known, state all come natively.
     // ------------------------------------------------------------------
-    // iface -> { bands }
-    property var wifiInfoMap: ({})
-    // iface -> { ssid -> { bssid, chan, freq, signal, security } }
-    property var apInfoMap: ({})
+    // iface -> { freq, width, rate, signal, ip }  (only while connected)
+    property var linkMap: ({})
+    // iface -> { ssid -> freq }  (strongest BSSID per SSID wins)
+    property var freqMap: ({})
 
     function refreshWifiInfo() {
         wifiInfoProcess.running = true
@@ -58,149 +60,57 @@ BarPopup {
     }
 
     function parseWifiInfo(text) {
-        const devMap = {}
-        const apMap = {}
+        const links = {}
+        const freqs = {}
         const lines = String(text).split("\n")
         for (let i = 0; i < lines.length; i++) {
             const raw = lines[i]
             if (raw === "")
                 continue
             const p = raw.split("\t")
-            if (p[0] === "D" && p.length >= 3) {
-                if (devMap[p[1]] === undefined)
-                    devMap[p[1]] = popup.emptyDevInfo()
-                devMap[p[1]].bands = p[2]
-            } else if (p[0] === "C" && p.length >= 7) {
+            if (p[0] === "C" && p.length >= 7) {
                 // C <iface> <freq> <width> <rate> <signal> <ip>
-                if (devMap[p[1]] === undefined)
-                    devMap[p[1]] = popup.emptyDevInfo()
-                devMap[p[1]].freq = p[2]
-                devMap[p[1]].width = p[3]
-                devMap[p[1]].rate = p[4]
-                devMap[p[1]].signal = p[5]
-                devMap[p[1]].ip = p[6]
+                links[p[1]] = { freq: p[2], width: p[3], rate: p[4], signal: p[5], ip: p[6] }
             } else if (p[0] === "A" && p.length >= 3) {
-                const iface = p[1]
+                // A <iface> <nmcli SSID:FREQ line>
                 const fields = popup.splitTerse(p[2])
-                // BSSID : SSID : CHAN : FREQ : SIGNAL : SECURITY
-                if (fields.length >= 6) {
-                    const ssid = fields[1]
-                    if (apMap[iface] === undefined)
-                        apMap[iface] = {}
-                    // list is signal-sorted: keep the strongest BSSID per SSID
-                    if (apMap[iface][ssid] === undefined) {
-                        apMap[iface][ssid] = {
-                            bssid: fields[0],
-                            chan: fields[2],
-                            freq: fields[3],
-                            signal: fields[4],
-                            security: fields[5]
-                        }
-                    }
-                }
+                if (fields.length < 2 || fields[0] === "")
+                    continue
+                if (freqs[p[1]] === undefined)
+                    freqs[p[1]] = {}
+                // list is signal-sorted: keep the strongest BSSID per SSID
+                if (freqs[p[1]][fields[0]] === undefined)
+                    freqs[p[1]][fields[0]] = fields[1]
             }
         }
-        popup.wifiInfoMap = devMap
-        popup.apInfoMap = apMap
-    }
-
-    function emptyDevInfo() {
-        return { bands: "", freq: "", width: "", rate: "", signal: "", ip: "" }
-    }
-
-    // "2.4,5,6" -> "2.4 · 5 · 6 GHz"
-    function wifiBands(dev) {
-        const info = popup.wifiInfoMap[dev.name]
-        if (info === undefined || info.bands === "")
-            return ""
-        return info.bands.split(",").join(" · ") + " GHz"
-    }
-
-    // "5745 MHz" -> "5 GHz"
-    function freqBand(freq) {
-        const f = parseFloat(freq)
-        if (isNaN(f) || f <= 0)
-            return ""
-        if (f < 3000)
-            return "2.4 GHz"
-        if (f < 5925)
-            return "5 GHz"
-        return "6 GHz"
-    }
-
-    // ------------------------------------------------------------------
-    // Security / login info
-    // ------------------------------------------------------------------
-    function securityLabel(sec) {
-        switch (sec) {
-        case WifiSecurityType.Wpa3SuiteB192:
-            return "WPA3 Suite-B"
-        case WifiSecurityType.Sae:
-            return "WPA3-SAE"
-        case WifiSecurityType.Wpa2Eap:
-            return "WPA2-Enterprise"
-        case WifiSecurityType.Wpa2Psk:
-            return "WPA2-PSK"
-        case WifiSecurityType.WpaEap:
-            return "WPA-Enterprise"
-        case WifiSecurityType.WpaPsk:
-            return "WPA-PSK"
-        case WifiSecurityType.StaticWep:
-            return "WEP"
-        case WifiSecurityType.DynamicWep:
-            return "WEP (dynamic)"
-        case WifiSecurityType.Leap:
-            return "LEAP"
-        case WifiSecurityType.Owe:
-            return "OWE"
-        case WifiSecurityType.Open:
-            return "Open"
-        default:
-            return "Unknown"
-        }
+        popup.linkMap = links
+        popup.freqMap = freqs
     }
 
     function deviceSecurity(dev) {
-        const n = dev.networks.values.find(x => x.connected)
-        return n === undefined ? "" : popup.securityLabel(n.security)
+        const n = NetworkDevices.connectedNetwork(dev)
+        return n === null ? "" : NetworkDevices.securityLabel(n.security)
     }
 
-    // Single info line: bands · security (Wi-Fi) / link speed (wired).
-    function deviceInfoLine(dev) {
-        const parts = []
-        if (dev.type === DeviceType.Wifi) {
-            const bands = popup.wifiBands(dev)
-            if (bands !== "")
-                parts.push(bands)
-            const sec = popup.deviceSecurity(dev)
-            if (sec !== "")
-                parts.push(sec)
-        } else if (dev.connected && dev.linkSpeed > 0) {
-            parts.push(dev.linkSpeed + " Mb/s")
-        }
-        return parts.join("   ·   ")
+    // Single info line for a wired device: link speed.
+    function wiredInfoLine(dev) {
+        if (dev.hasLink && dev.linkSpeed > 0)
+            return dev.linkSpeed + " Mb/s"
+        return ""
     }
 
-    // Single info line for an access point: band · security.
-    function apInfo(dev, ssid) {
-        const m = popup.apInfoMap[dev.name]
-        if (m === undefined)
-            return ""
-        const a = m[ssid]
-        if (a === undefined)
-            return ""
+    // Single info line for an access point: band · security (band is the only
+    // value still read from nmcli; everything else is native).
+    function apInfo(net) {
         const parts = []
-        const band = popup.freqBand(a.freq)
+        const m = popup.freqMap[net.device.name]
+        const band = NetworkDevices.freqBand(m === undefined ? "" : m[net.name])
         if (band !== "")
             parts.push(band)
-        if (a.security !== "" && a.security !== "--")
-            parts.push(a.security)
+        const sec = NetworkDevices.securityLabel(net.security)
+        if (sec !== "" && sec !== "Unknown")
+            parts.push(sec)
         return parts.join("   ·   ")
-    }
-
-    function connectedNetwork(dev) {
-        const n = dev.networks.values.find(x => x.connected)
-        return n === undefined ? null : n
     }
 
     // Access points for the scrolling list: the connected one is pinned under
@@ -213,7 +123,7 @@ BarPopup {
 
     // Connected AP info line 1: frequency · security · IP
     function connectedLine1(dev) {
-        const info = popup.wifiInfoMap[dev.name]
+        const info = popup.linkMap[dev.name]
         const parts = []
         if (info !== undefined && info.freq !== "")
             parts.push(Math.round(parseFloat(info.freq)) + " MHz")
@@ -227,13 +137,15 @@ BarPopup {
 
     // Connected AP info line 2: link speed · channel width · signal
     function connectedLine2(dev) {
-        const info = popup.wifiInfoMap[dev.name]
+        const info = popup.linkMap[dev.name]
+        if (info === undefined)
+            return ""
         const parts = []
-        if (info !== undefined && info.rate !== "")
+        if (info.rate !== "")
             parts.push(info.rate + " Mbps")
-        if (info !== undefined && info.width !== "")
+        if (info.width !== "")
             parts.push(info.width + " MHz")
-        if (info !== undefined && info.signal !== "")
+        if (info.signal !== "")
             parts.push(info.signal + " dBm")
         return parts.join("   ·   ")
     }
@@ -247,18 +159,14 @@ BarPopup {
     property bool passwordFailed: false
 
     function popupOpened() {
-        for (const d of popup.devices) {
-            if (d.type === DeviceType.Wifi)
-                d.scannerEnabled = true
-        }
+        for (const d of NetworkDevices.wifiDevices)
+            d.scannerEnabled = true
         refreshWifiInfo()
     }
 
     function popupClosed() {
-        for (const d of popup.devices) {
-            if (d.type === DeviceType.Wifi)
-                d.scannerEnabled = false
-        }
+        for (const d of NetworkDevices.wifiDevices)
+            d.scannerEnabled = false
         pendingNetwork = null
         password = ""
         connectingNetwork = null
@@ -294,22 +202,6 @@ BarPopup {
         }
     }
 
-    function isOpen(net) {
-        return net.security === WifiSecurityType.Open
-            || net.security === WifiSecurityType.Owe
-            || net.security === WifiSecurityType.Unknown
-    }
-
-    function signalGlyph(strength) {
-        if (strength >= 0.75)
-            return "\ue065" // wifi4
-        if (strength >= 0.50)
-            return "\ue064" // wifi3
-        if (strength >= 0.25)
-            return "\ue063" // wifi2
-        return "\ue062"     // wifi1
-    }
-
     function activate(net) {
         // Starting a new interaction closes any open password prompt.
         if (popup.pendingNetwork !== null) {
@@ -318,7 +210,7 @@ BarPopup {
         }
         if (net.connected) {
             net.disconnect()
-        } else if (net.known || isOpen(net)) {
+        } else if (net.known || NetworkDevices.isOpen(net)) {
             popup.passwordFailed = false
             popup.connectingNetwork = net
             net.connect()
@@ -338,50 +230,40 @@ BarPopup {
         }
     }
 
-    // Force a fresh scan on a specific Wi-Fi interface.
-    function rescan(dev) {
-        rescanProcess.command = ["nmcli", "device", "wifi", "rescan", "ifname", dev.name]
-        rescanProcess.running = true
-    }
-
-    // Bands for every wireless interface plus its scanned APs:
-    //   D <iface> <2.4,5,6>
+    // Link details Quickshell.Networking does not expose. Emitted lines:
     //   C <iface> <freq> <width> <rate> <signal> <ip>   (only when connected)
-    //   A <iface> <nmcli -t AP line>
+    //   A <iface> <nmcli SSID:FREQ line>                (per scanned AP)
+    // Native rescan: Quickshell already issues RequestScan every ~10 s while
+    // `scannerEnabled`, so no explicit `nmcli ... rescan` is needed.
     Process {
         id: wifiInfoProcess
         command: ["/bin/sh", "-c",
             "for i in /sys/class/net/*; do\n"
             + "  iface=${i##*/}\n"
             + "  [ -d \"$i/wireless\" ] || continue\n"
-            + "  info=$(iw dev \"$iface\" info 2>/dev/null)\n"
-            + "  wiphy=$(printf '%s\\n' \"$info\" | awk '/wiphy/ {print $2; exit}')\n"
-            + "  bands=\"\"\n"
-            + "  if [ -n \"$wiphy\" ]; then\n"
-            + "    bands=$(iw phy \"phy$wiphy\" info 2>/dev/null | awk '/Band [0-9]+:/ {inb=1; got=0; next} inb && !got && /MHz \\[[0-9]+\\]/ {f=$2+0; got=1; if (f<3000) print \"2.4\"; else if (f<5925) print \"5\"; else print \"6\"}' | sort -u | paste -sd, -)\n"
-            + "  fi\n"
-            + "  printf 'D\\t%s\\t%s\\n' \"$iface\" \"$bands\"\n"
-            + "  link=$(iw dev \"$iface\" link 2>/dev/null)\n"
-            + "  if printf '%s\\n' \"$link\" | grep -q '^Connected'; then\n"
-            + "    freq=$(printf '%s\\n' \"$link\" | awk '/freq:/ {print $2; exit}')\n"
-            + "    sig=$(printf '%s\\n' \"$link\" | awk '/signal:/ {print $2; exit}')\n"
-            + "    rate=$(printf '%s\\n' \"$link\" | awk '/tx bitrate:/ {print $3; exit}')\n"
-            + "    [ -z \"$rate\" ] && rate=$(printf '%s\\n' \"$link\" | awk '/bitrate:/ {print $3; exit}')\n"
-            + "    width=$(printf '%s\\n' \"$info\" | awk '/width:/ {for (j=1;j<=NF;j++) if ($j==\"width:\") {print $(j+1); exit}}')\n"
-            + "    ip=$(ip -4 -o addr show dev \"$iface\" 2>/dev/null | awk '{print $4; exit}' | cut -d/ -f1)\n"
-            + "    printf 'C\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \"$iface\" \"$freq\" \"$width\" \"$rate\" \"$sig\" \"$ip\"\n"
-            + "  fi\n"
-            + "  nmcli -t -f BSSID,SSID,CHAN,FREQ,SIGNAL,SECURITY device wifi list ifname \"$iface\" --rescan no 2>/dev/null | while IFS= read -r line; do\n"
+            + "  nmcli -t -f SSID,FREQ device wifi list ifname \"$iface\" --rescan no 2>/dev/null | while IFS= read -r line; do\n"
             + "    printf 'A\\t%s\\t%s\\n' \"$iface\" \"$line\"\n"
             + "  done\n"
+            + "  ip=$(ip -4 -o addr show dev \"$iface\" 2>/dev/null | awk '{ split($4, a, \"/\"); print a[1]; exit }')\n"
+            + "  link=$(iw dev \"$iface\" link 2>/dev/null)\n"
+            + "  case \"$link\" in\n"
+            + "  \"Connected to\"*)\n"
+            + "    info=$(iw dev \"$iface\" info 2>/dev/null)\n"
+            + "    printf '%s\\n%s\\n' \"$link\" \"$info\" | awk -v iface=\"$iface\" -v ip=\"$ip\" '\n"
+            + "      /^Connected/ { conn = 1 }\n"
+            + "      /freq:/ && f == \"\" { f = $2 }\n"
+            + "      /signal:/ && s == \"\" { s = $2 }\n"
+            + "      /tx bitrate:/ { r = $3 }\n"
+            + "      /bitrate:/ && r == \"\" { r = $3 }\n"
+            + "      /width:/ && w == \"\" { for (j = 1; j <= NF; j++) if ($j == \"width:\") { w = $(j+1); exit } }\n"
+            + "      END { if (conn) print \"C\\t\" iface \"\\t\" f \"\\t\" w \"\\t\" r \"\\t\" s \"\\t\" ip }\n"
+            + "    '\n"
+            + "    ;;\n"
+            + "  esac\n"
             + "done"]
         stdout: StdioCollector {
             onStreamFinished: popup.parseWifiInfo(text)
         }
-    }
-
-    Process {
-        id: rescanProcess
     }
 
     Process {
@@ -397,7 +279,41 @@ BarPopup {
         onRunningChanged: if (running) popup.refreshWifiInfo()
     }
 
-    // Header: title + connection editor + close
+    // Native link-state changes refresh the CLI data immediately instead of
+    // waiting for the poll above (IP / bitrate right after connecting).
+    Item {
+        id: linkWatcher
+        width: 0
+        height: 0
+        visible: false
+
+        Repeater {
+            model: NetworkDevices.wifiDevices
+
+            delegate: Item {
+                id: watcher
+                required property var modelData
+                width: 0
+                height: 0
+
+                Connections {
+                    target: watcher.modelData
+
+                    function onConnectedChanged() {
+                        if (popup.visible)
+                            popup.refreshWifiInfo()
+                    }
+
+                    function onStateChanged() {
+                        if (popup.visible)
+                            popup.refreshWifiInfo()
+                    }
+                }
+            }
+        }
+    }
+
+    // Header: title + global Wi-Fi toggle + connection editor + close
     Item {
         width: parent.width
         height: 26
@@ -416,6 +332,15 @@ BarPopup {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             spacing: 12
+
+            // Global Wi-Fi switch (NetworkManager rfkill). Hardware switch
+            // off -> disabled here too; the per-device NM switch stays below.
+            Switch {
+                anchors.verticalCenter: parent.verticalCenter
+                checked: Networking.wifiEnabled
+                enabled: Networking.wifiHardwareEnabled
+                onToggled: Networking.wifiEnabled = !Networking.wifiEnabled
+            }
 
             Icon {
                 glyph: "\ue071" // settings
@@ -458,9 +383,13 @@ BarPopup {
             required property var modelData
             readonly property bool isWifi: modelData.type === DeviceType.Wifi
             readonly property bool connected: modelData.connected
+            // Mid-transition (NM connect/disconnect in flight). NetworkDevice
+            // has no `stateChanging`; derive it from `state`.
+            readonly property bool changing: modelData.state === ConnectionState.Connecting
+                || modelData.state === ConnectionState.Disconnecting
             readonly property var aps: section.isWifi ? popup.networksOf(section.modelData) : []
             readonly property var connectedAp: section.isWifi
-                ? popup.connectedNetwork(section.modelData) : null
+                ? NetworkDevices.connectedNetwork(section.modelData) : null
             width: popup.contentWidth
             spacing: 4
 
@@ -478,7 +407,7 @@ BarPopup {
                     width: parent.width
                     spacing: 0
 
-                    // Header row: type icon + name + rescan + enable switch
+                    // Header row: type icon + name + enable switch
                     Item {
                         width: parent.width
                         height: 30
@@ -497,31 +426,31 @@ BarPopup {
                             }
                         }
 
-                        Icon {
-                            id: sectionIcon
-                            anchors.left: parent.left
-                            anchors.leftMargin: 8
-                            anchors.verticalCenter: parent.verticalCenter
-                            horizontalAlignment: Text.AlignHCenter
-                            glyph: section.isWifi ? "" : "\ue075" // ethernet (wifi-logo removed)
-                            style: popup.iconStyle
-                            color: section.connected ? Theme.accentColor : Theme.fgColor
-                            opacity: section.connected ? 1 : 0.6
-                            font.pixelSize: Math.round(Theme.iconSize * 1.3)
-                        }
 
                         Text {
-                            anchors.left: sectionIcon.right
+                            id: devName
+                            anchors.left: parent.left
                             anchors.leftMargin: 8
-                            anchors.right: controls.left
                             anchors.rightMargin: 8
                             anchors.verticalCenter: parent.verticalCenter
+                            horizontalAlignment: Text.AlignHCenter
                             text: section.modelData.name
                             color: Theme.fgColor
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSize
                             font.bold: true
                             elide: Text.ElideRight
+                        }
+
+                        Text {
+                            anchors.left: devName.right
+                            anchors.right: controls.left
+                            anchors.leftMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            horizontalAlignment: Text.AlignLeft
+                            text: section.isWifi ? "Wifi" : "Ethernet"
+                            color: Theme.fgColorMuted
+                            font.pixelSize: Math.round(Theme.fontSize * 0.8)
                         }
 
                         Row {
@@ -531,24 +460,13 @@ BarPopup {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 10
 
-                            Icon {
-                                visible: section.isWifi
-                                anchors.verticalCenter: parent.verticalCenter
-                                glyph: "\ue01a" // arrow-clockwise
-                                style: popup.iconStyle
-                                opacity: 0.8
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: popup.rescan(section.modelData)
-                                }
-                            }
-
                             // Enable / disable the interface (NetworkManager managed).
+                            // Disabled while NM is still flipping the state.
                             // Kept last so it always sits at the far right.
                             Switch {
                                 anchors.verticalCenter: parent.verticalCenter
                                 checked: section.modelData.nmManaged
+                                enabled: !section.changing
                                 onToggled: section.modelData.nmManaged = !section.modelData.nmManaged
                             }
                         }
@@ -572,16 +490,12 @@ BarPopup {
                             anchors.margins: 6
                             spacing: 8
 
-                            // Tick removed; the 18px slot is kept so the text
-                            // stays aligned with the signal icon on the right.
-                            Item {
-                                width: 18
-                                height: 1
-                            }
+                            // Tick removed earlier: the signal icon on the
+                            // right is the only trailing slot.
 
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - 18 - 18 - 2 * parent.spacing
+                                width: parent.width - 18 - parent.spacing
                                 spacing: 0
 
                                 Text {
@@ -621,8 +535,7 @@ BarPopup {
                                 width: 18
                                 horizontalAlignment: Text.AlignHCenter
                                 glyph: section.connectedAp
-                                    ? popup.signalGlyph(section.connectedAp.signalStrength) : ""
-                                style: popup.iconStyle
+                                    ? NetworkDevices.signalGlyph(section.connectedAp.signalStrength) : ""
                                 color: Theme.accentColor
                                 opacity: 0.8
                             }
@@ -631,12 +544,12 @@ BarPopup {
                 }
             }
 
-            // Device info line, only for wired devices (Wi-Fi moved to the
-            // connected AP block above).
+            // Device info line, only for wired devices (Wi-Fi info lives in
+            // the connected AP block above).
             Text {
                 visible: !section.isWifi
                 width: parent.width
-                text: popup.deviceInfoLine(section.modelData)
+                text: popup.wiredInfoLine(section.modelData)
                 color: Theme.fgColor
                 opacity: 0.6
                 font.family: Theme.fontFamily
@@ -670,6 +583,10 @@ BarPopup {
                             required property var modelData
                             readonly property bool connected: modelData.connected
                             readonly property bool prompting: popup.pendingNetwork === apRow.modelData
+                            // Mid-connect/disconnect: ignore clicks, show status.
+                            readonly property bool changing: modelData.stateChanging
+                            // Saved profile that is not the active link -> forget.
+                            readonly property bool canForget: modelData.known && !modelData.connected
                             width: popup.contentWidth
                             height: popup.apRowHeight
                             radius: 6
@@ -685,7 +602,7 @@ BarPopup {
                             MouseArea {
                                 id: apMouse
                                 anchors.fill: parent
-                                enabled: !apRow.prompting
+                                enabled: !apRow.prompting && !apRow.changing
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: popup.activate(apRow.modelData)
@@ -703,15 +620,16 @@ BarPopup {
                                     width: 18
                                     horizontalAlignment: Text.AlignHCenter
                                     glyph: apRow.connected ? "\ue029"
-                                        : (popup.isOpen(apRow.modelData) ? "\ue065" : "\ue066")
-                                    style: popup.iconStyle
+                                        : (NetworkDevices.isOpen(apRow.modelData) ? "\ue065" : "\ue066")
                                     color: apRow.connected ? Theme.accentColor : Theme.fgColor
                                     opacity: apRow.connected ? 1 : 0.7
                                 }
 
+                                // Third 18px slot is reserved for "forget" so the
+                                // name column never shifts on hover.
                                 Column {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: parent.width - 18 - 18 - 2 * parent.spacing
+                                    width: parent.width - 18 * 3 - 3 * parent.spacing
                                     spacing: 0
 
                                     Text {
@@ -725,9 +643,10 @@ BarPopup {
 
                                     Text {
                                         width: parent.width
-                                        text: popup.apInfo(section.modelData, apRow.modelData.name)
+                                        text: apRow.changing ? "Connecting…"
+                                            : popup.apInfo(apRow.modelData)
                                         color: Theme.fgColor
-                                        opacity: 0.6
+                                        opacity: apRow.changing ? 0.9 : 0.6
                                         font.family: Theme.fontFamily
                                         font.pixelSize: Theme.fontSize - 4
                                         elide: Text.ElideRight
@@ -738,10 +657,25 @@ BarPopup {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 18
                                     horizontalAlignment: Text.AlignHCenter
-                                    glyph: popup.signalGlyph(apRow.modelData.signalStrength)
-                                    style: popup.iconStyle
+                                    glyph: NetworkDevices.signalGlyph(apRow.modelData.signalStrength)
                                     color: apRow.connected ? Theme.accentColor : Theme.fgColor
                                     opacity: 0.8
+                                }
+
+                                // Drop the saved profile (hover-revealed).
+                                Icon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 18
+                                    horizontalAlignment: Text.AlignHCenter
+                                    glyph: "\ue037" // sign-out = leave/forget
+                                    color: Theme.urgentColor
+                                    opacity: apRow.canForget && apMouse.containsMouse ? 1 : 0
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        enabled: apRow.canForget && apMouse.containsMouse
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: apRow.modelData.forget()
+                                    }
                                 }
                             }
 

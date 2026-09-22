@@ -333,15 +333,6 @@ BarPopup {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 12
 
-            // Global Wi-Fi switch (NetworkManager rfkill). Hardware switch
-            // off -> disabled here too; the per-device NM switch stays below.
-            Switch {
-                anchors.verticalCenter: parent.verticalCenter
-                checked: Networking.wifiEnabled
-                enabled: Networking.wifiHardwareEnabled
-                onToggled: Networking.wifiEnabled = !Networking.wifiEnabled
-            }
-
             Icon {
                 glyph: "\ue071" // settings
                 style: popup.iconStyle
@@ -476,7 +467,7 @@ BarPopup {
                     Item {
                         width: parent.width
                         visible: section.connectedAp !== null
-                        height: visible ? connectedInfo.implicitHeight + 12 : 0
+                        height: visible ? connectedInfo.implicitHeight + 16 : 0
 
                         MouseArea {
                             anchors.fill: parent
@@ -487,7 +478,9 @@ BarPopup {
                         Row {
                             id: connectedInfo
                             anchors.fill: parent
-                            anchors.margins: 6
+                            // Same 8px horizontal padding as the AP rows below so
+                            // every signal icon lands in one vertical column.
+                            anchors.margins: 8
                             spacing: 8
 
                             // Tick removed earlier: the signal icon on the
@@ -625,8 +618,10 @@ BarPopup {
                                     opacity: apRow.connected ? 1 : 0.7
                                 }
 
-                                // Third 18px slot is reserved for "forget" so the
-                                // name column never shifts on hover.
+                                // An icon slot is reserved for "forget" so the
+                                // name column never shifts on hover, and the
+                                // signal icon stays last -> same vertical column
+                                // as the one in the connected-AP header block.
                                 Column {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: parent.width - 18 * 3 - 3 * parent.spacing
@@ -653,15 +648,6 @@ BarPopup {
                                     }
                                 }
 
-                                Icon {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 18
-                                    horizontalAlignment: Text.AlignHCenter
-                                    glyph: NetworkDevices.signalGlyph(apRow.modelData.signalStrength)
-                                    color: apRow.connected ? Theme.accentColor : Theme.fgColor
-                                    opacity: 0.8
-                                }
-
                                 // Drop the saved profile (hover-revealed).
                                 Icon {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -676,6 +662,15 @@ BarPopup {
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: apRow.modelData.forget()
                                     }
+                                }
+
+                                Icon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 18
+                                    horizontalAlignment: Text.AlignHCenter
+                                    glyph: NetworkDevices.signalGlyph(apRow.modelData.signalStrength)
+                                    color: apRow.connected ? Theme.accentColor : Theme.fgColor
+                                    opacity: 0.8
                                 }
                             }
 

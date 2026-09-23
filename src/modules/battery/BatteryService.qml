@@ -131,6 +131,48 @@ Singleton {
         }
     }
 
+    // ------------------------------------------------------------------
+    // power-profiles-daemon profile, native via the PowerProfiles
+    // singleton (no CLI). Button colors: red / blue / green.
+    // ------------------------------------------------------------------
+    readonly property string powerProfileLabel: {
+        switch (PowerProfiles.profile) {
+        case PowerProfile.Performance:
+            return "Performance"
+        case PowerProfile.PowerSaver:
+            return "Power saver"
+        default:
+            return "Balanced"
+        }
+    }
+
+    readonly property color powerProfileColor: {
+        switch (PowerProfiles.profile) {
+        case PowerProfile.Performance:
+            return "#d64545"
+        case PowerProfile.PowerSaver:
+            return "#3fae62"
+        default:
+            return "#3d7fd6"
+        }
+    }
+
+    // Performance -> Balanced -> Power saver -> Performance. Performance is
+    // skipped when the daemon does not expose it (`hasPerformanceProfile`).
+    function cyclePowerProfile() {
+        switch (PowerProfiles.profile) {
+        case PowerProfile.Performance:
+            PowerProfiles.profile = PowerProfile.Balanced
+            break
+        case PowerProfile.Balanced:
+            PowerProfiles.profile = PowerProfile.PowerSaver
+            break
+        default:
+            PowerProfiles.profile = PowerProfiles.hasPerformanceProfile
+                ? PowerProfile.Performance : PowerProfile.Balanced
+        }
+    }
+
     // Battery level icons: index 0..10 (battery0 empty -> battery10 full)
     readonly property var batteryGlyphs: [
         "\ue000", "\ue002", "\ue003", "\ue004", "\ue005", "\ue006",

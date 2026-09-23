@@ -120,40 +120,91 @@ BarPopup {
         font.pixelSize: Theme.fontSize
     }
 
-    // Current charge summary
-    Row {
+    // Current charge summary: icon + % on the left, power-profile button
+    // at the right edge of the percentage line (an Item wrapper so the
+    // summary can be laid out with anchors).
+    Item {
         visible: BatteryService.present
         width: parent.width
-        spacing: 14
+        implicitHeight: summaryRow.implicitHeight
 
-        Icon {
+        Row {
+            id: summaryRow
+            anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            glyph: BatteryService.batteryGlyph(BatteryService.percentage, BatteryService.pluggedIn)
-            style: popup.iconStyle
-            color: BatteryService.charging ? Theme.accentColor : Theme.fgColor
-            font.pixelSize: Math.round(34 * 1.5)
-        }
+            spacing: 14
 
-        Column {
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 1
-
-            Text {
-                text: Math.round(BatteryService.percentage) + "%"
-                color: Theme.fgColor
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSize + 11
-                font.bold: true
-                font.features: { "tnum": 1 }
+            Icon {
+                id: summaryIcon
+                anchors.verticalCenter: parent.verticalCenter
+                glyph: BatteryService.batteryGlyph(BatteryService.percentage, BatteryService.pluggedIn)
+                style: popup.iconStyle
+                color: BatteryService.charging ? Theme.accentColor : Theme.fgColor
+                font.pixelSize: Math.round(34 * 1.5)
             }
 
-            Text {
-                text: BatteryService.stateText
-                    + (BatteryService.limitActive ? "   ·   Limit " + BatteryService.endThreshold + "%" : "")
-                color: BatteryService.charging ? Theme.accentColor : Theme.fgColor
-                opacity: 0.8
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSize - 2
+            Column {
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 1
+
+                // Percentage line: value at the left, power-profile button
+                // at the right, both anchored to THIS line so the button is
+                // centered exactly with the value.
+                Item {
+                    id: percentLine
+                    width: popup.contentWidth - summaryIcon.width - summaryRow.spacing
+                    implicitHeight: Math.max(percentText.implicitHeight, powerProfileButton.height)
+
+                    Text {
+                        id: percentText
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: Math.round(BatteryService.percentage) + "%"
+                        color: Theme.fgColor
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize + 11
+                        font.bold: true
+                        font.features: { "tnum": 1 }
+                    }
+
+                    // Power-profiles-daemon button: current profile name,
+                    // colored by profile (red/blue/green); click cycles.
+                    Rectangle {
+                        id: powerProfileButton
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: powerProfileText.implicitWidth + 14
+                        height: 20
+                        radius: 5
+                        color: Qt.rgba(BatteryService.powerProfileColor.r, BatteryService.powerProfileColor.g, BatteryService.powerProfileColor.b, 0.5)
+                        border.width: 1
+                        border.color: Theme.buttonBorder
+
+                        Text {
+                            id: powerProfileText
+                            anchors.centerIn: parent
+                            text: BatteryService.powerProfileLabel
+                            color: Theme.fgColor
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSize - 4
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: BatteryService.cyclePowerProfile()
+                        }
+                    }
+                }
+
+                Text {
+                    text: BatteryService.stateText
+                        + (BatteryService.limitActive ? "   ·   Limit " + BatteryService.endThreshold + "%" : "")
+                    color: BatteryService.charging ? Theme.accentColor : Theme.fgColor
+                    opacity: 0.8
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSize - 2
+                }
             }
         }
     }

@@ -19,6 +19,78 @@ BarPopup {
     // Ordered internal-first: eth internal, eth external, wifi internal, wifi external.
     readonly property var deviceSections: NetworkDevices.ordered
 
+    // Accordion shared with the VPN section: only one section open at a time
+    // (one wifi AP list, or the VPN list). VPN open -> every wifi folds.
+    // Empty / unknown name -> first wifi device (default state).
+    property string wifiAccordion: ""
+    readonly property string expandedWifi: {
+        if (vpnOpen)
+            return ""
+        if (wifiAccordion !== "") {
+            const hit = deviceSections.find(d => d.type === DeviceType.Wifi && d.name === wifiAccordion)
+            if (hit !== undefined)
+                return wifiAccordion
+        }
+        const first = deviceSections.find(d => d.type === DeviceType.Wifi)
+        return first === undefined ? "" : first.name
+    }
+
+    // VPN profiles (nmcli + warp-cli; Quickshell.Networking exposes no VPN
+    // API). Collapsed by default; opening it folds every wifi section.
+    property bool vpnOpen: false
+    // [{ name, uuid, warp, active, status }]
+    property var vpnConnections: []
+    readonly property int vpnActiveCount: vpnConnections.filter(v => v.active).length
+
+    function refreshVpn() {
+        vpnProcess.running = true
+    }
+
+    function parseVpn(text) {
+        const active = {}
+        const list = []
+        let warpState = null
+        const lines = String(text).split("\n")
+        for (let i = 0; i < lines.length; i++) {
+            const raw = lines[i]
+            if (raw === "")
+                continue
+            if (raw.startsWith("K\t")) {
+                const f = popup.splitTerse(raw.slice(2))
+                if (f.length >= 2)
+                    active[f[1]] = true
+            } else if (raw.startsWith("V\t")) {
+                const f = popup.splitTerse(raw.slice(2))
+                // vpn = IPsec/OpenVPN/etc · wireguard = native WG profiles
+                if (f.length >= 3 && (f[1] === "vpn" || f[1] === "wireguard"))
+                    list.push({ name: f[0], uuid: f[2], warp: false, active: false, status: "" })
+            } else if (raw.startsWith("W\t")) {
+                // warp-cli status, 1st line minus "Status update: "
+                warpState = raw.slice(2)
+            }
+        }
+        for (let j = 0; j < list.length; j++) {
+            list[j].active = active[list[j].uuid] === true
+            list[j].status = list[j].active ? "Connected" : "Disconnected"
+        }
+        // Cloudflare WARP runs outside NetworkManager (warp-svc) -> synthetic
+        // row, always listed first when warp-cli is installed.
+        if (warpState !== null && warpState !== "")
+            list.unshift({ name: "Cloudflare WARP", uuid: "", warp: true,
+                active: warpState === "Connected", status: warpState })
+        popup.vpnConnections = list
+    }
+
+    // Connect / disconnect by UUID (argv, no shell interpolation).
+    // `id` only takes a connection NAME -> must use the `uuid` keyword.
+    function toggleVpn(v) {
+        if (v.warp)
+            vpnCommand.command = ["warp-cli", v.active ? "disconnect" : "connect"]
+        else
+            vpnCommand.command = ["nmcli", "connection", v.active ? "down" : "up", "uuid", v.uuid]
+        vpnCommand.running = true
+    }
+
     // Access-point list scrolling: at most `maxApRows` rows fit; beyond that
     // the section scrolls.
     readonly property int maxApRows: 5
@@ -92,11 +164,80 @@ BarPopup {
         return n === null ? "" : NetworkDevices.securityLabel(n.security)
     }
 
-    // Single info line for a wired device: link speed.
+    // ------------------------------------------------------------------
+    // Wired link details Quickshell does not expose: it only has `hasLink`
+    // and `linkSpeed` (`address` is the MAC, not the IP). Duplex + speed
+    // fallback come from sysfs, the port type (baseT) from ethtool when
+    // installed, IPv4 from `ip -4`.
+    // ------------------------------------------------------------------
+    // iface -> { speed, duplex, port, ip }
+    property var wiredMap: ({})
+
+    function refreshWired() {
+        wiredProcess.running = true
+    }
+
+    function parseWired(text) {
+        const map = {}
+        const lines = String(text).split("\n")
+        for (let i = 0; i < lines.length; i++) {
+            const raw = lines[i]
+            if (raw === "")
+                continue
+            const p = raw.split("\t")
+            if (p[0] === "E" && p.length >= 6)
+                map[p[1]] = { speed: parseInt(p[2], 10), duplex: p[3], port: p[4], ip: p[5] }
+        }
+        popup.wiredMap = map
+    }
+
+    // ethtool `Port:` -> IEEE standard suffix ("1000M baseT full").
+    function portLabel(port) {
+        switch (port) {
+        case "Twisted Pair":
+            return "baseT"
+        case "FIBRE":
+            return "fiber"
+        case "MII":
+            return "mii"
+        default:
+            return ""
+        }
+    }
+
+    // Wired line: link standard + IPv4 while the cable is plugged,
+    // "No cable" otherwise (no status word).
     function wiredInfoLine(dev) {
-        if (dev.hasLink && dev.linkSpeed > 0)
-            return dev.linkSpeed + " Mb/s"
-        return ""
+        if (!dev.hasLink)
+            return "No cable"
+        const info = popup.wiredMap[dev.name]
+        const parts = []
+        const standard = popup.wiredStandardLine(dev)
+        if (standard !== "")
+            parts.push(standard)
+        if (info !== undefined && info.ip !== "")
+            parts.push(info.ip)
+        return parts.join("   ·   ")
+    }
+
+    // Link standard when known, e.g. "1000M baseT full"
+    // (native linkSpeed first, sysfs speed as fallback).
+    function wiredStandardLine(dev) {
+        if (!dev.hasLink)
+            return ""
+        const info = popup.wiredMap[dev.name]
+        let speed = dev.linkSpeed
+        if (!(speed > 0) && info !== undefined && info.speed > 0)
+            speed = info.speed
+        if (!(speed > 0))
+            return ""
+        const parts = [speed + "M"]
+        const port = info === undefined ? "" : popup.portLabel(info.port)
+        if (port !== "")
+            parts.push(port)
+        if (info !== undefined && info.duplex !== "")
+            parts.push(info.duplex)
+        return parts.join(" ")
     }
 
     // Single info line for an access point: band · security (band is the only
@@ -162,6 +303,8 @@ BarPopup {
         for (const d of NetworkDevices.wifiDevices)
             d.scannerEnabled = true
         refreshWifiInfo()
+        refreshVpn()
+        refreshWired()
     }
 
     function popupClosed() {
@@ -266,17 +409,121 @@ BarPopup {
         }
     }
 
+    // Wired link standard + IPv4, per interface:
+    //   E <iface> <sysfs speed> <duplex> <ethtool Port> <ipv4>
+    Process {
+        id: wiredProcess
+        command: ["/bin/sh", "-c",
+            "for i in /sys/class/net/*; do\n"
+            + "  iface=${i##*/}\n"
+            + "  [ -d \"$i/wireless\" ] && continue\n"
+            + "  speed=$(cat \"$i/speed\" 2>/dev/null)\n"
+            + "  duplex=$(cat \"$i/duplex\" 2>/dev/null)\n"
+            + "  ip=$(ip -4 -o addr show dev \"$iface\" 2>/dev/null | awk '{ split($4, a, \"/\"); print a[1]; exit }')\n"
+            + "  port=\"\"\n"
+            + "  if command -v ethtool >/dev/null 2>&1; then\n"
+            + "    port=$(ethtool \"$iface\" 2>/dev/null | awk -F': *' '/Port:/ { print $2; exit }')\n"
+            + "  fi\n"
+            + "  printf 'E\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \"$iface\" \"$speed\" \"$duplex\" \"$port\" \"$ip\"\n"
+            + "done"]
+        stdout: StdioCollector {
+            onStreamFinished: popup.parseWired(text)
+        }
+    }
+
+    // Wired link / IP changes refresh the CLI data right away instead of
+    // waiting for the poll above (carrier up, DHCP after connect).
+    Item {
+        id: wiredWatcher
+        width: 0
+        height: 0
+        visible: false
+
+        Repeater {
+            model: NetworkDevices.wiredDevices
+
+            delegate: Item {
+                id: watcher
+                required property var modelData
+                width: 0
+                height: 0
+
+                Connections {
+                    target: watcher.modelData
+
+                    function onHasLinkChanged() {
+                        if (popup.visible)
+                            popup.refreshWired()
+                    }
+
+                    function onConnectedChanged() {
+                        if (popup.visible)
+                            popup.refreshWired()
+                    }
+
+                    function onLinkSpeedChanged() {
+                        if (popup.visible)
+                            popup.refreshWired()
+                    }
+                }
+            }
+        }
+    }
+
     Process {
         id: connectionEditor
         command: ["nm-connection-editor"]
+    }
+
+    // VPN profiles: full list (V, TYPE-filtered in parseVpn) + active set (K,
+    // matched by UUID) so connect state survives name changes + WARP state (W).
+    Process {
+        id: vpnProcess
+        command: ["/bin/sh", "-c",
+            "nmcli -t -f NAME,TYPE,UUID connection show 2>/dev/null"
+            + " | while IFS= read -r l; do printf 'V\\t%s\\n' \"$l\"; done\n"
+            + "nmcli -t -f NAME,UUID connection show --active 2>/dev/null"
+            + " | while IFS= read -r l; do printf 'K\\t%s\\n' \"$l\"; done\n"
+            + "if command -v warp-cli >/dev/null 2>&1; then\n"
+            + "  w=$(warp-cli status 2>/dev/null"
+            + " | awk 'NR==1 { sub(/^Status update: /, \"\"); print; exit }')\n"
+            + "  [ -n \"$w\" ] && printf 'W\\t%s\\n' \"$w\"\n"
+            + "fi"]
+        stdout: StdioCollector {
+            onStreamFinished: popup.parseVpn(text)
+        }
+    }
+
+    // Re-read VPN state after every connect / disconnect attempt, plus once
+    // more after a settle delay (WARP still reports "Connecting" right away).
+    Process {
+        id: vpnCommand
+        onExited: {
+            popup.refreshVpn()
+            vpnSettle.restart()
+        }
+    }
+
+    Timer {
+        id: vpnSettle
+        interval: 1500
+        onTriggered: popup.refreshVpn()
     }
 
     Timer {
         interval: 10000
         repeat: true
         running: popup.visible
-        onTriggered: popup.refreshWifiInfo()
-        onRunningChanged: if (running) popup.refreshWifiInfo()
+        onTriggered: {
+            popup.refreshWifiInfo()
+            popup.refreshVpn()
+            popup.refreshWired()
+        }
+        onRunningChanged: if (running) {
+            popup.refreshWifiInfo()
+            popup.refreshVpn()
+            popup.refreshWired()
+        }
     }
 
     // Native link-state changes refresh the CLI data immediately instead of
@@ -389,6 +636,172 @@ BarPopup {
         }
     }
 
+    // VPN profiles (NetworkManager). Header card matches the device sections;
+    // collapsed by default, header click toggles the list below it.
+    Column {
+        id: vpnSection
+        width: popup.contentWidth
+        spacing: 4
+
+        Rectangle {
+            id: vpnHeaderCard
+            width: parent.width
+            radius: 6
+            color: Theme.bgColorMuted
+            implicitHeight: vpnHeaderColumn.implicitHeight
+
+            Column {
+                id: vpnHeaderColumn
+                width: parent.width
+                spacing: 0
+
+                Item {
+                    width: parent.width
+                    height: 30
+
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.rightMargin: vpnChevron.width + 16
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: popup.vpnOpen = !popup.vpnOpen
+                    }
+
+                    Icon {
+                        id: vpnIcon
+                        anchors.left: parent.left
+                        anchors.leftMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 18
+                        horizontalAlignment: Text.AlignHCenter
+                        glyph: "\ue068" // wifi-protected = tunnel
+                        color: popup.vpnActiveCount > 0 ? Theme.accentColor : Theme.fgColor
+                        opacity: popup.vpnActiveCount > 0 ? 1 : 0.7
+                    }
+
+                    Text {
+                        id: vpnName
+                        anchors.left: vpnIcon.right
+                        anchors.leftMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "VPN"
+                        color: Theme.fgColor
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
+                        font.bold: true
+                    }
+
+                    Text {
+                        anchors.left: vpnName.right
+                        anchors.leftMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: popup.vpnConnections.length === 0 ? "No connections"
+                            : (popup.vpnActiveCount > 0
+                                ? popup.vpnActiveCount + " active" : "Inactive")
+                        color: Theme.fgColorMuted
+                        font.pixelSize: Math.round(Theme.fontSize * 0.8)
+                        elide: Text.ElideRight
+                    }
+
+                    Icon {
+                        id: vpnChevron
+                        anchors.right: parent.right
+                        anchors.rightMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 18
+                        horizontalAlignment: Text.AlignHCenter
+                        glyph: "\ue02a" // chevron-down
+                        rotation: popup.vpnOpen ? 180 : 0
+                        color: Theme.fgColorMuted
+                        opacity: 0.8
+                    }
+                }
+            }
+        }
+
+        // Profile list: hidden while collapsed (default).
+        Column {
+            width: parent.width
+            spacing: popup.apRowSpacing
+            visible: popup.vpnOpen
+
+            Text {
+                visible: popup.vpnConnections.length === 0
+                width: parent.width
+                height: visible ? implicitHeight + 8 : 0
+                text: "No VPN connections"
+                color: Theme.fgColor
+                opacity: 0.6
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize
+            }
+
+            Repeater {
+                model: popup.vpnConnections
+
+                delegate: Rectangle {
+                    id: vpnRow
+                    required property var modelData
+                    readonly property bool active: modelData.active
+                    width: popup.contentWidth
+                    height: popup.apRowHeight
+                    radius: 6
+                    color: vpnMouse.containsMouse
+                        ? Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.12)
+                        : "transparent"
+
+                    MouseArea {
+                        id: vpnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: popup.toggleVpn(vpnRow.modelData)
+                    }
+
+                    Row {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        spacing: 8
+
+                        Icon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 18
+                            horizontalAlignment: Text.AlignHCenter
+                            glyph: vpnRow.active ? "\ue029" : "\ue068"
+                            color: vpnRow.active ? Theme.accentColor : Theme.fgColor
+                            opacity: vpnRow.active ? 1 : 0.7
+                        }
+
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 18 - parent.spacing
+                            spacing: 0
+
+                            Text {
+                                width: parent.width
+                                text: vpnRow.modelData.name
+                                color: Theme.fgColor
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSize
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                width: parent.width
+                                text: vpnRow.modelData.status
+                                color: Theme.fgColor
+                                opacity: 0.6
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSize - 4
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Text {
         visible: popup.deviceSections.length === 0
         width: parent.width
@@ -413,6 +826,9 @@ BarPopup {
             readonly property bool changing: modelData.state === ConnectionState.Connecting
                 || modelData.state === ConnectionState.Disconnecting
             readonly property var aps: section.isWifi ? popup.networksOf(section.modelData) : []
+            // AP list expanded: wifi sections follow the accordion, wired has none.
+            readonly property bool apsOpen: !section.isWifi
+                || popup.expandedWifi === section.modelData.name
             readonly property var connectedAp: section.isWifi
                 ? NetworkDevices.connectedNetwork(section.modelData) : null
             width: popup.contentWidth
@@ -437,17 +853,21 @@ BarPopup {
                         width: parent.width
                         height: 30
 
-                        // Wired: click to connect / disconnect (controls sit on top)
+                        // Wifi: click header -> expand this AP list, fold the others.
+                        // Wired: click to connect / disconnect (controls sit on top).
                         MouseArea {
                             anchors.fill: parent
                             anchors.rightMargin: controls.width + 16
-                            enabled: !section.isWifi
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                if (section.modelData.connected)
+                                if (section.isWifi) {
+                                    popup.vpnOpen = false
+                                    popup.wifiAccordion = section.modelData.name
+                                } else if (section.modelData.connected) {
                                     section.modelData.disconnect()
-                                else if (section.modelData.network !== null)
+                                } else if (section.modelData.network !== null) {
                                     section.modelData.network.connect()
+                                }
                             }
                         }
 
@@ -568,26 +988,35 @@ BarPopup {
                             }
                         }
                     }
-                }
-            }
 
-            // Device info line, only for wired devices (Wi-Fi info lives in
-            // the connected AP block above).
-            Text {
-                visible: !section.isWifi
-                width: parent.width
-                text: popup.wiredInfoLine(section.modelData)
-                color: Theme.fgColor
-                opacity: 0.6
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSize - 3
-                elide: Text.ElideRight
+                    // Wired link info: "1000M baseT full · <IPv4>" with cable,
+                    // "No cable" without; shares the header card background
+                    // (same 8px margins / +16 height as the connected-wifi block).
+                    Item {
+                        id: wiredInfoItem
+                        visible: !section.isWifi && wiredText.text !== ""
+                        width: parent.width
+                        height: visible ? wiredText.implicitHeight + 16 : 0
+
+                        Text {
+                            id: wiredText
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            text: popup.wiredInfoLine(section.modelData)
+                            color: Theme.fgColor
+                            opacity: 0.6
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSize - 3
+                            elide: Text.ElideRight
+                        }
+                    }
+                }
             }
 
             // Found access points (Wi-Fi). Capped to `maxApRows`; scrolls if more.
             Flickable {
                 id: apsFlick
-                visible: section.isWifi && section.aps.length > 0
+                visible: section.isWifi && section.apsOpen && section.aps.length > 0
                 width: parent.width
                 height: Math.min(apsColumn.implicitHeight,
                     popup.maxApRows * popup.apRowHeight

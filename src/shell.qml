@@ -1,8 +1,12 @@
 //@ pragma IconTheme Zoticons
 //@ pragma UseQApplication
-// Silence GetAll warnings from the playerctld MPRIS proxy (it errors with
-// NoActivePlayer whenever no player is being controlled).
-//@ pragma Env QT_LOGGING_RULES = "quickshell.dbus.properties.warning=false"
+// Log rules CANNOT be set in-config: LogManager::init runs before pragma
+// parsing, so any `Env QT_LOGGING_RULES` pragma arrives too late (a no-op),
+// and quoted values are discarded by the rule parser anyway. Pass rules at
+// launch instead (verified qs 0.3.1):
+//   qs -p <path> --log-rules 'quickshell.dbus.properties.warning=false;quickshell.service.sni.watcher.warning=false'
+// Mutes playerctld NoActivePlayer noise + tray apps that register an SNI
+// item and leave the bus ("Ignoring invalid StatusNotifierItem registration").
 
 import QtQuick
 import Quickshell

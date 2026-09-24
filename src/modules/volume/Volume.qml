@@ -64,7 +64,7 @@ Item {
             if (volume.ready)
                 volume.sink.audio.muted = !volume.sink.audio.muted
         }
-        onWheel: volume.adjust(wheel.angleDelta.y)
+        onWheel: (wheel) => volume.adjust(wheel.angleDelta.y)
     }
 
     // Apply a wheel delta: positive raises the volume, negative lowers it.

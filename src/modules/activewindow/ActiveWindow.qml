@@ -21,15 +21,13 @@ Item {
     // The toplevel currently focused on this module's screen (null if none)
     readonly property var focusedToplevel: root._focusedToplevel
 
-    // Name shown for the focused window. Uses the displayName override for the
-    // appId when one is configured (AppNames.qml); otherwise capitalizes the
-    // appId, falling back to the window title when the app has no appId
-    // (e.g. some XWayland clients).
+    // Name shown for the focused window, fully capitalized: displayName()
+    // resolves user map -> .desktop Name -> appId (AppNames.qml). No title
+    // fallback: a toplevel without appId yields an empty label (width 0).
     readonly property string label: {
         if (!root.focusedToplevel)
             return ""
-        const appId = root.focusedToplevel.appId || root.focusedToplevel.title
-        return root.capitalize(appNames.displayName(appId))
+        return root.capitalize(appNames.displayName(root.focusedToplevel.appId || ""))
     }
 
     // Internal: the toplevel chosen by updateFocused()

@@ -24,6 +24,7 @@ import "modules/systray"
 import "modules/volume"
 import "modules/weather"
 import "modules/offpeak"
+import "modules/notifications"
 import "modules/wallpaper"
 
 ShellRoot {
@@ -55,6 +56,10 @@ ShellRoot {
                     }
 
                     right: [
+                        Notifications {
+                            output: modelData.name
+                            outputs: Config.outputs(Config.revision, "notifications", modelData.name)
+                        },
                         Offpeak {
                             output: modelData.name
                             outputs: Config.outputs(Config.revision, "offpeak", modelData.name)
@@ -115,6 +120,15 @@ ShellRoot {
         model: Quickshell.screens
         VolumeOsd {
             outputs: Config.outputs(Config.revision, "volume", modelData.name)
+        }
+    }
+
+    // Notification toasts: one overlay surface per screen showing the current
+    // notification stack (newest on top). Independent from bar popups.
+    Variants {
+        model: Quickshell.screens
+        NotificationToast {
+            outputs: Config.outputs(Config.revision, "notifications", modelData.name)
         }
     }
 

@@ -36,6 +36,10 @@ Singleton {
     readonly property real bgOpacity: Config.settings.colors.bgOpacity
     readonly property color accentColor: Config.settings.colors.accent
     readonly property color urgentColor: Config.settings.colors.urgent
+    // Notification urgency border colors (low / normal / critical)
+    readonly property color urgencyLowColor: Config.settings.colors.urgencyLow
+    readonly property color urgencyNormalColor: Config.settings.colors.urgencyNormal
+    readonly property color urgencyCriticalColor: Config.settings.colors.urgencyCritical
     // Off-peak / peak indicator colors (DeepSeek API off-peak pricing)
     readonly property color offPeakColor: Config.settings.colors.offPeak
     readonly property color peakColor: Config.settings.colors.peak
@@ -50,5 +54,15 @@ Singleton {
     // Popup appearance
     readonly property int popupRadius: Config.settings.colors.popupRadius
     readonly property int popupBorderWidth: Config.settings.colors.popupBorderWidth
+
+    // Border color for a notification urgency (NotificationUrgency: 0=Low,
+    // 1=Normal, 2=Critical). Kept here so every notification surface shares it.
+    function urgencyColor(u) {
+        if (u === 0)
+            return urgencyLowColor
+        if (u === 2)
+            return urgencyCriticalColor
+        return urgencyNormalColor
+    }
 
 }

@@ -109,6 +109,15 @@ ShellRoot {
         }
     }
 
+    // Volume OSD: transient overlay while the default sink's volume/mute
+    // changes. One surface per screen, filtered like the bar's volume module.
+    Variants {
+        model: Quickshell.screens
+        VolumeOsd {
+            outputs: Config.outputs(Config.revision, "volume", modelData.name)
+        }
+    }
+
     // Independent admin window (hidden by default)
     // FloatingWindow {
     //     id: controlCenter

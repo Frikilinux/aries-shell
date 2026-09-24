@@ -1,2 +1,4 @@
 module modules.volume
 Volume 1.0 Volume.qml
+singleton VolumeOsdService 1.0 VolumeOsdService.qml
+VolumeOsd 1.0 VolumeOsd.qml

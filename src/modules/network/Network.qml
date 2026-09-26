@@ -76,8 +76,8 @@ Item {
                 visible: NetworkDevices.vpnActive && network.wiredConnected
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                anchors.rightMargin: -1
-                anchors.bottomMargin: -3
+                anchors.rightMargin: -3
+                anchors.bottomMargin: -1
                 width: 13
                 height: 13
                 radius: height / 2
@@ -110,8 +110,8 @@ Item {
                 visible: NetworkDevices.vpnActive && network.wifiConnected
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                anchors.rightMargin: -1
-                anchors.bottomMargin: -3
+                anchors.rightMargin: -3
+                anchors.bottomMargin: -1
                 width: 13
                 height: 13
                 radius: height / 2

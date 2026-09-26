@@ -539,8 +539,9 @@ BarPopup {
             id: vpnHeaderCard
             width: parent.width
             radius: 6
-            color: Theme.bgColorMuted
+            color: Qt.rgba(Theme.fgBarColor.b, Theme.fgBarColor.b, Theme.fgBarColor.b, 0.1)
             implicitHeight: vpnHeaderColumn.implicitHeight
+
 
             Column {
                 id: vpnHeaderColumn
@@ -774,7 +775,7 @@ BarPopup {
                 id: headerCard
                 width: parent.width
                 radius: 6
-                color: Theme.bgColorMuted
+                color: Qt.rgba(Theme.fgBarColor.b, Theme.fgBarColor.b, Theme.fgBarColor.b, 0.1)
                 implicitHeight: headerColumn.implicitHeight
 
                 Column {

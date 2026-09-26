@@ -9,7 +9,7 @@ import "../popup"
 BarPopup {
     id: popup
 
-    popupWidth: 340
+    popupWidth: 400
     maxContentHeight: 460
 
     // Icon style used by this popup's icons. Defaults to Theme.iconStyle.
@@ -149,7 +149,6 @@ BarPopup {
             spacing: 12
 
             HeaderButton {
-                // glyph: NotificationService.dnd ? "\ue079" : "\ue07a" // bell-off / bell-snooze
                 glyph: "\ue07a"
                 tint: NotificationService.dnd ? Theme.accentColor : Theme.fgColorMuted
                 onClicked: NotificationService.toggleDnd()

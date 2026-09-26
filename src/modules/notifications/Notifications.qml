@@ -37,7 +37,7 @@ Item {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         // bell-urgent for unread critical, bell-off while DND is on, bell otherwise
-        glyph: notifications.critical ? "\ue07b" : (notifications.dndOn ? "\ue07a" : "\ue07c")
+        glyph: notifications.critical ? "\ue07b" : (notifications.dndOn ? "\ue07a" : (notifications.unread ? "\ue07c" : ""))
         color: notifications.critical ? Theme.urgencyCriticalColor : Theme.fgBarColor
         opacity: (notifications.unread > 0 || notifications.dndOn) ? 1 : 0.6
     }

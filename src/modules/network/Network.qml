@@ -56,21 +56,74 @@ Item {
         id: row
         spacing: Theme.spacing
 
-        Icon {
+        // Ethernet icon + VPN shield badge (only while the link is connected).
+        Item {
             visible: network.hasWired
-            glyph: "\ue075" // ethernet
-            // style: network.iconStyle
-            color: Theme.fgBarColor
-            opacity: network.wiredConnected ? 1 : (network.wiredLinked ? 0.7 : 0.45)
+            implicitWidth: ethIcon.implicitWidth
+            implicitHeight: ethIcon.implicitHeight
+
+            Icon {
+                id: ethIcon
+                glyph: "\ue075" // ethernet
+                // style: network.iconStyle
+                color: Theme.fgBarColor
+                opacity: network.wiredConnected ? 1 : (network.wiredLinked ? 0.7 : 0.45)
+            }
+
+            // Colored shield over the icon's bottom-right corner, on a bar-colored
+            // disc so the icon underneath does not show through.
+            Rectangle {
+                visible: NetworkDevices.vpnActive && network.wiredConnected
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.rightMargin: -1
+                anchors.bottomMargin: -3
+                width: 13
+                height: 13
+                radius: height / 2
+                color: Theme.bgBarColor
+
+                Icon {
+                    anchors.centerIn: parent
+                    glyph: "\ue081" // shield
+                    color: Theme.buttonPrimaryBgColor
+                    font.pixelSize: 9
+                }
+            }
         }
 
-        Icon {
+        // Wifi icon + VPN shield badge (only while connected).
+        Item {
             visible: network.hasWifi
-            glyph: network.wifiGlyph
-            // style: network.iconStyle
-            color: Theme.fgBarColor
-            opacity: network.wifiConnected ? 1 : 0.45
-            font.pixelSize: Theme.iconSize - 2
+            implicitWidth: wifiIcon.implicitWidth
+            implicitHeight: wifiIcon.implicitHeight
+
+            Icon {
+                id: wifiIcon
+                glyph: network.wifiGlyph
+                // style: network.iconStyle
+                color: Theme.fgBarColor
+                opacity: network.wifiConnected ? 1 : 0.45
+            }
+
+            Rectangle {
+                visible: NetworkDevices.vpnActive && network.wifiConnected
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.rightMargin: -1
+                anchors.bottomMargin: -3
+                width: 13
+                height: 13
+                radius: height / 2
+                color: Theme.bgBarColor
+
+                Icon {
+                    anchors.centerIn: parent
+                    glyph: "\ue081" // shield
+                    color: Theme.urgentColor
+                    font.pixelSize: 11
+                }
+            }
         }
     }
 

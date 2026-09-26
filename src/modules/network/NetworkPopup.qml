@@ -35,61 +35,10 @@ BarPopup {
         return first === undefined ? "" : first.name
     }
 
-    // VPN profiles (nmcli + warp-cli; Quickshell.Networking exposes no VPN
-    // API). Collapsed by default; opening it folds every wifi section.
+    // VPN list lives in the NetworkDevices singleton (shared with the bar
+    // badge). This is UI-only expand state: collapsed by default; opening it
+    // folds every wifi section.
     property bool vpnOpen: false
-    // [{ name, uuid, warp, active, status }]
-    property var vpnConnections: []
-    readonly property int vpnActiveCount: vpnConnections.filter(v => v.active).length
-
-    function refreshVpn() {
-        vpnProcess.running = true
-    }
-
-    function parseVpn(text) {
-        const active = {}
-        const list = []
-        let warpState = null
-        const lines = String(text).split("\n")
-        for (let i = 0; i < lines.length; i++) {
-            const raw = lines[i]
-            if (raw === "")
-                continue
-            if (raw.startsWith("K\t")) {
-                const f = popup.splitTerse(raw.slice(2))
-                if (f.length >= 2)
-                    active[f[1]] = true
-            } else if (raw.startsWith("V\t")) {
-                const f = popup.splitTerse(raw.slice(2))
-                // vpn = IPsec/OpenVPN/etc · wireguard = native WG profiles
-                if (f.length >= 3 && (f[1] === "vpn" || f[1] === "wireguard"))
-                    list.push({ name: f[0], uuid: f[2], warp: false, active: false, status: "" })
-            } else if (raw.startsWith("W\t")) {
-                // warp-cli status, 1st line minus "Status update: "
-                warpState = raw.slice(2)
-            }
-        }
-        for (let j = 0; j < list.length; j++) {
-            list[j].active = active[list[j].uuid] === true
-            list[j].status = list[j].active ? "Connected" : "Disconnected"
-        }
-        // Cloudflare WARP runs outside NetworkManager (warp-svc) -> synthetic
-        // row, always listed first when warp-cli is installed.
-        if (warpState !== null && warpState !== "")
-            list.unshift({ name: "Cloudflare WARP", uuid: "", warp: true,
-                active: warpState === "Connected", status: warpState })
-        popup.vpnConnections = list
-    }
-
-    // Connect / disconnect by UUID (argv, no shell interpolation).
-    // `id` only takes a connection NAME -> must use the `uuid` keyword.
-    function toggleVpn(v) {
-        if (v.warp)
-            vpnCommand.command = ["warp-cli", v.active ? "disconnect" : "connect"]
-        else
-            vpnCommand.command = ["nmcli", "connection", v.active ? "down" : "up", "uuid", v.uuid]
-        vpnCommand.running = true
-    }
 
     // Access-point list scrolling: at most `maxApRows` rows fit; beyond that
     // the section scrolls.
@@ -111,26 +60,6 @@ BarPopup {
         wifiInfoProcess.running = true
     }
 
-    // Split one `nmcli -t` line, honouring `\:` / `\\` escapes.
-    function splitTerse(line) {
-        const out = []
-        let cur = ""
-        for (let i = 0; i < line.length; i++) {
-            const c = line.charAt(i)
-            if (c === "\\" && i + 1 < line.length) {
-                cur += line.charAt(i + 1)
-                i++
-            } else if (c === ":") {
-                out.push(cur)
-                cur = ""
-            } else {
-                cur += c
-            }
-        }
-        out.push(cur)
-        return out
-    }
-
     function parseWifiInfo(text) {
         const links = {}
         const freqs = {}
@@ -145,7 +74,7 @@ BarPopup {
                 links[p[1]] = { freq: p[2], width: p[3], rate: p[4], signal: p[5], ip: p[6] }
             } else if (p[0] === "A" && p.length >= 3) {
                 // A <iface> <nmcli SSID:FREQ line>
-                const fields = popup.splitTerse(p[2])
+                const fields = NetworkDevices.splitTerse(p[2])
                 if (fields.length < 2 || fields[0] === "")
                     continue
                 if (freqs[p[1]] === undefined)
@@ -303,7 +232,7 @@ BarPopup {
         for (const d of NetworkDevices.wifiDevices)
             d.scannerEnabled = true
         refreshWifiInfo()
-        refreshVpn()
+        NetworkDevices.refreshVpn()
         refreshWired()
     }
 
@@ -475,53 +404,16 @@ BarPopup {
         command: ["nm-connection-editor"]
     }
 
-    // VPN profiles: full list (V, TYPE-filtered in parseVpn) + active set (K,
-    // matched by UUID) so connect state survives name changes + WARP state (W).
-    Process {
-        id: vpnProcess
-        command: ["/bin/sh", "-c",
-            "nmcli -t -f NAME,TYPE,UUID connection show 2>/dev/null"
-            + " | while IFS= read -r l; do printf 'V\\t%s\\n' \"$l\"; done\n"
-            + "nmcli -t -f NAME,UUID connection show --active 2>/dev/null"
-            + " | while IFS= read -r l; do printf 'K\\t%s\\n' \"$l\"; done\n"
-            + "if command -v warp-cli >/dev/null 2>&1; then\n"
-            + "  w=$(warp-cli status 2>/dev/null"
-            + " | awk 'NR==1 { sub(/^Status update: /, \"\"); print; exit }')\n"
-            + "  [ -n \"$w\" ] && printf 'W\\t%s\\n' \"$w\"\n"
-            + "fi"]
-        stdout: StdioCollector {
-            onStreamFinished: popup.parseVpn(text)
-        }
-    }
-
-    // Re-read VPN state after every connect / disconnect attempt, plus once
-    // more after a settle delay (WARP still reports "Connecting" right away).
-    Process {
-        id: vpnCommand
-        onExited: {
-            popup.refreshVpn()
-            vpnSettle.restart()
-        }
-    }
-
-    Timer {
-        id: vpnSettle
-        interval: 1500
-        onTriggered: popup.refreshVpn()
-    }
-
     Timer {
         interval: 10000
         repeat: true
         running: popup.visible
         onTriggered: {
             popup.refreshWifiInfo()
-            popup.refreshVpn()
             popup.refreshWired()
         }
         onRunningChanged: if (running) {
             popup.refreshWifiInfo()
-            popup.refreshVpn()
             popup.refreshWired()
         }
     }
@@ -661,7 +553,6 @@ BarPopup {
 
                     MouseArea {
                         anchors.fill: parent
-                        anchors.rightMargin: vpnChevron.width + 16
                         cursorShape: Qt.PointingHandCursor
                         onClicked: popup.vpnOpen = !popup.vpnOpen
                     }
@@ -673,9 +564,9 @@ BarPopup {
                         anchors.verticalCenter: parent.verticalCenter
                         width: 18
                         horizontalAlignment: Text.AlignHCenter
-                        glyph: "\ue068" // wifi-protected = tunnel
-                        color: popup.vpnActiveCount > 0 ? Theme.accentColor : Theme.fgColor
-                        opacity: popup.vpnActiveCount > 0 ? 1 : 0.7
+                        glyph: "\ue07f" // wifi-protected = tunnel
+                        color: NetworkDevices.vpnActiveCount > 0 ? Theme.accentColor : Theme.fgColor
+                        opacity: NetworkDevices.vpnActiveCount > 0 ? 1 : 0.7
                     }
 
                     Text {
@@ -694,25 +585,67 @@ BarPopup {
                         anchors.left: vpnName.right
                         anchors.leftMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
-                        text: popup.vpnConnections.length === 0 ? "No connections"
-                            : (popup.vpnActiveCount > 0
-                                ? popup.vpnActiveCount + " active" : "Inactive")
+                        text: NetworkDevices.vpnConnections.length === 0 ? "No connections"
+                            : (NetworkDevices.vpnActiveCount > 0 ? "Connected" : "Inactive")
                         color: Theme.fgColorMuted
                         font.pixelSize: Math.round(Theme.fontSize * 0.8)
                         elide: Text.ElideRight
                     }
+                }
 
-                    Icon {
-                        id: vpnChevron
-                        anchors.right: parent.right
-                        anchors.rightMargin: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 18
-                        horizontalAlignment: Text.AlignHCenter
-                        glyph: "\ue02a" // chevron-down
-                        rotation: popup.vpnOpen ? 180 : 0
-                        color: Theme.fgColorMuted
-                        opacity: 0.8
+                // Active profile pinned under the header (same treatment as the
+                // connected Wi-Fi AP): name + status, click disconnects it.
+                Item {
+                    width: parent.width
+                    visible: NetworkDevices.activeVpn !== null
+                    height: visible ? vpnConnectedRow.implicitHeight + 16 : 0
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: if (NetworkDevices.activeVpn !== null)
+                            NetworkDevices.toggleVpn(NetworkDevices.activeVpn)
+                    }
+
+                    Row {
+                        id: vpnConnectedRow
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 8
+
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 18 - parent.spacing
+                            spacing: 0
+
+                            Text {
+                                width: parent.width
+                                text: NetworkDevices.activeVpn ? NetworkDevices.activeVpn.name : ""
+                                color: Theme.fgColor
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSize
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                width: parent.width
+                                text: NetworkDevices.activeVpn ? NetworkDevices.activeVpn.status : ""
+                                color: Theme.fgColor
+                                opacity: 0.6
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSize - 4
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        Icon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 18
+                            horizontalAlignment: Text.AlignHCenter
+                            glyph: "\ue080"
+                            color: Theme.accentColor
+                            opacity: 0.8
+                        }
                     }
                 }
             }
@@ -725,7 +658,7 @@ BarPopup {
             visible: popup.vpnOpen
 
             Text {
-                visible: popup.vpnConnections.length === 0
+                visible: NetworkDevices.vpnConnections.length === 0
                 width: parent.width
                 height: visible ? implicitHeight + 8 : 0
                 text: "No VPN connections"
@@ -736,7 +669,7 @@ BarPopup {
             }
 
             Repeater {
-                model: popup.vpnConnections
+                model: NetworkDevices.vpnProfiles()
 
                 delegate: Rectangle {
                     id: vpnRow
@@ -754,7 +687,7 @@ BarPopup {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: popup.toggleVpn(vpnRow.modelData)
+                        onClicked: NetworkDevices.toggleVpn(vpnRow.modelData)
                     }
 
                     Row {
@@ -767,9 +700,10 @@ BarPopup {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 18
                             horizontalAlignment: Text.AlignHCenter
-                            glyph: vpnRow.active ? "\ue029" : "\ue068"
+                            glyph: vpnRow.active ? "\ue029" : "\ue07f"
                             color: vpnRow.active ? Theme.accentColor : Theme.fgColor
                             opacity: vpnRow.active ? 1 : 0.7
+                            // font.pixelSize: Theme.iconSize + 7
                         }
 
                         Column {

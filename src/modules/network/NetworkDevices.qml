@@ -159,4 +159,150 @@ Singleton {
         }
         root.externalMap = map
     }
+
+    // ------------------------------------------------------------------
+    // VPN (nmcli + warp-cli; Quickshell.Networking exposes no VPN API).
+    // Shared by the bar shield badge and the popup section, and polled
+    // always so the bar tracks state while the popup is closed.
+    // ------------------------------------------------------------------
+    // [{ name, uuid, warp, active, status }]
+    property var vpnConnections: []
+    readonly property int vpnActiveCount: vpnConnections.filter(v => v.active).length
+    readonly property bool vpnActive: vpnActiveCount > 0
+    // Profile pinned in the popup header card (mirrors the connected AP).
+    readonly property var activeVpn: {
+        const v = root.vpnConnections.find(x => x.active)
+        return v === undefined ? null : v
+    }
+
+    // Non-active profiles listed below the popup header; the active one is pinned.
+    function vpnProfiles() {
+        return root.vpnConnections.filter(v => !v.active)
+    }
+
+    function refreshVpn() {
+        vpnProcess.running = true
+    }
+
+    // Split one `nmcli -t` line, honouring `\:` / `\\` escapes.
+    function splitTerse(line) {
+        const out = []
+        let cur = ""
+        for (let i = 0; i < line.length; i++) {
+            const c = line.charAt(i)
+            if (c === "\\" && i + 1 < line.length) {
+                cur += line.charAt(i + 1)
+                i++
+            } else if (c === ":") {
+                out.push(cur)
+                cur = ""
+            } else {
+                cur += c
+            }
+        }
+        out.push(cur)
+        return out
+    }
+
+    function parseVpn(text) {
+        const active = {}
+        const list = []
+        let warpState = null
+        const lines = String(text).split("\n")
+        for (let i = 0; i < lines.length; i++) {
+            const raw = lines[i]
+            if (raw === "")
+                continue
+            if (raw.startsWith("K\t")) {
+                const f = root.splitTerse(raw.slice(2))
+                if (f.length >= 2)
+                    active[f[1]] = true
+            } else if (raw.startsWith("V\t")) {
+                const f = root.splitTerse(raw.slice(2))
+                // vpn = IPsec/OpenVPN/etc · wireguard = native WG profiles
+                if (f.length >= 3 && (f[1] === "vpn" || f[1] === "wireguard"))
+                    list.push({ name: f[0], uuid: f[2], warp: false, active: false, status: "" })
+            } else if (raw.startsWith("W\t")) {
+                // warp-cli status, 1st line minus "Status update: "
+                warpState = raw.slice(2)
+            }
+        }
+        for (let j = 0; j < list.length; j++) {
+            list[j].active = active[list[j].uuid] === true
+            list[j].status = list[j].active ? "Connected" : "Disconnected"
+        }
+        // Cloudflare WARP runs outside NetworkManager (warp-svc) -> synthetic
+        // row, always listed first when warp-cli is installed.
+        if (warpState !== null && warpState !== "")
+            list.unshift({ name: "Cloudflare WARP", uuid: "", warp: true,
+                active: warpState === "Connected", status: warpState })
+        root.vpnConnections = list
+    }
+
+    // Connect / disconnect by UUID. `id` only takes a connection NAME ->
+    // must use the `uuid` keyword. Connecting a profile first brings the
+    // active one down, so only one VPN is ever up.
+    function vpnQuote(s) {
+        return "'" + String(s).replace(/'/g, "'\\''") + "'"
+    }
+
+    function toggleVpn(v) {
+        const commands = []
+        const same = (a, b) => a.warp === b.warp && (a.warp || a.uuid === b.uuid)
+        for (const o of root.vpnConnections) {
+            if (o.active && !same(o, v))
+                commands.push(o.warp ? "warp-cli disconnect"
+                    : "nmcli connection down uuid " + root.vpnQuote(o.uuid))
+        }
+        commands.push(v.warp
+            ? "warp-cli " + (v.active ? "disconnect" : "connect")
+            : "nmcli connection " + (v.active ? "down" : "up")
+                + " uuid " + root.vpnQuote(v.uuid))
+        vpnCommand.command = ["/bin/sh", "-c", commands.join("\n")]
+        vpnCommand.running = true
+    }
+
+    // VPN profiles: full list (V, TYPE-filtered in parseVpn) + active set (K,
+    // matched by UUID) + WARP state (W).
+    Process {
+        id: vpnProcess
+        command: ["/bin/sh", "-c",
+            "nmcli -t -f NAME,TYPE,UUID connection show 2>/dev/null"
+            + " | while IFS= read -r l; do printf 'V\\t%s\\n' \"$l\"; done\n"
+            + "nmcli -t -f NAME,UUID connection show --active 2>/dev/null"
+            + " | while IFS= read -r l; do printf 'K\\t%s\\n' \"$l\"; done\n"
+            + "if command -v warp-cli >/dev/null 2>&1; then\n"
+            + "  w=$(warp-cli status 2>/dev/null"
+            + " | awk 'NR==1 { sub(/^Status update: /, \"\"); print; exit }')\n"
+            + "  [ -n \"$w\" ] && printf 'W\\t%s\\n' \"$w\"\n"
+            + "fi"]
+        stdout: StdioCollector {
+            onStreamFinished: root.parseVpn(text)
+        }
+    }
+
+    // Re-read VPN state after every connect / disconnect attempt, plus once
+    // more after a settle delay (WARP still reports "Connecting" right away).
+    Process {
+        id: vpnCommand
+        onExited: {
+            root.refreshVpn()
+            vpnSettle.restart()
+        }
+    }
+
+    Timer {
+        id: vpnSettle
+        interval: 1500
+        onTriggered: root.refreshVpn()
+    }
+
+    // Always-on poll so the bar badge tracks VPN state with the popup closed.
+    Timer {
+        interval: 10000
+        repeat: true
+        running: true
+        onTriggered: root.refreshVpn()
+        Component.onCompleted: root.refreshVpn()
+    }
 }

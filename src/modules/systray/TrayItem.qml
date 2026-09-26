@@ -1,4 +1,5 @@
 import QtQuick
+import "../theme"
 // import Quickshell
 // import Quickshell.Services.SystemTray
 
@@ -12,8 +13,9 @@ Item {
 
     // The SystemTrayItem this button represents
     required property var item
-    // Size of the icon glyph in px
-    property int iconSize: 5
+    // Displayed icon size in px. Systray sets this from its own `iconSize`;
+    // the default keeps the component usable (and sane) standalone.
+    property int iconSize: Theme.iconSize
 
     // Extra hover area around the icon (does not affect layout size)
     property int itemPadding: 5

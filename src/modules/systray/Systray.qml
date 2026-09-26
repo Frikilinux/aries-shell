@@ -15,9 +15,8 @@ Item {
     property var outputs
     // The output being rendered.
     property string output: ""
-    // Displayed size of each tray icon in px.
-    property int iconSize: Theme.iconSize - 2
-    // property int iconSize: 17
+    // Displayed size of each tray icon in px (propagated to TrayItem/TrayIcon).
+    property int iconSize: Theme.iconSize
     // Gap between consecutive icons.
     property int spacing: Theme.spacing
 

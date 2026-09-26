@@ -36,6 +36,18 @@ Singleton {
     // Number of notifications received since the history was last opened.
     property int unread: 0
 
+    // True while any unread entry is critical. Derived from the per-entry
+    // `unread` flag so it clears the moment the entry is read or removed.
+    readonly property bool unreadCritical: {
+        root.revision
+        for (let i = 0; i < root.entries.length; i++) {
+            const e = root.entries[i]
+            if (e.unread && e.urgency === NotificationUrgency.Critical)
+                return true
+        }
+        return false
+    }
+
     // True once the on-disk cache has been read (or confirmed absent).
     property bool loaded: false
 
@@ -77,7 +89,14 @@ Singleton {
     }
 
     function markRead() {
-        if (root.unread !== 0) {
+        let changed = root.unread !== 0
+        for (let i = 0; i < root.entries.length; i++) {
+            if (root.entries[i].unread) {
+                root.entries[i].unread = false
+                changed = true
+            }
+        }
+        if (changed) {
             root.unread = 0
             root.bump()
         }
@@ -222,11 +241,14 @@ Singleton {
         entry.isTransient = notification.hints ? (notification.hints.transient === true) : false
         entry.appName = notification.appName || ""
         entry.appIcon = notification.appIcon || ""
+        entry.image = notification.image || ""
         entry.summary = notification.summary || ""
         entry.body = notification.body || ""
         entry.desktopEntry = notification.desktopEntry || ""
         entry.urgency = notification.urgency
         entry.actions = root._actionsOf(notification)
+        // A (re)delivered notification is unread again.
+        entry.unread = true
 
         if (!root.dnd) {
             // Keep the live object alive while it is on screen.
@@ -375,6 +397,9 @@ Singleton {
         return {
             appName: entry.appName,
             appIcon: entry.appIcon,
+            // Inline image-data URLs (image://qsimage/<id>) use a per-process
+            // sequential id and cannot be restored, so don't persist them.
+            image: entry.image.startsWith("image://qsimage/") ? "" : entry.image,
             summary: entry.summary,
             body: entry.body,
             desktopEntry: entry.desktopEntry,
@@ -408,6 +433,7 @@ Singleton {
             })
             entry.appName = d.appName || ""
             entry.appIcon = d.appIcon || ""
+            entry.image = d.image || ""
             entry.summary = d.summary || ""
             entry.body = d.body || ""
             entry.desktopEntry = d.desktopEntry || ""
@@ -488,11 +514,15 @@ Singleton {
 
         property string appName: ""
         property string appIcon: ""
+        // Image sent by the client (`image-path`/`image-data`, e.g. `notify-send -i`).
+        property string image: ""
         property string summary: ""
         property string body: ""
         property string desktopEntry: ""
         property int urgency: NotificationUrgency.Normal
         property var actions: []
+        // Whether this entry arrived since the history was last opened.
+        property bool unread: false
 
         readonly property Connections serverConn: Connections {
             target: entry.notification !== null ? entry.notification.Retainable : null

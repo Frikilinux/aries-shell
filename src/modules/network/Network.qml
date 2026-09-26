@@ -16,7 +16,7 @@ Item {
     // The popup window, exposed so shell.qml can configure it (e.g. popup.iconStyle)
     property alias popup: popupWindow
     // Icon style used by this module's bar icons. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
+    // property string iconStyle: Theme.iconStyle
 
     // Ordered internal-first: eth internal, eth external, wifi internal, wifi external
     readonly property var wifiDevices: NetworkDevices.wifiDevices
@@ -59,7 +59,7 @@ Item {
         Icon {
             visible: network.hasWired
             glyph: "\ue075" // ethernet
-            style: network.iconStyle
+            // style: network.iconStyle
             color: Theme.fgBarColor
             opacity: network.wiredConnected ? 1 : (network.wiredLinked ? 0.7 : 0.45)
         }
@@ -67,9 +67,10 @@ Item {
         Icon {
             visible: network.hasWifi
             glyph: network.wifiGlyph
-            style: network.iconStyle
+            // style: network.iconStyle
             color: Theme.fgBarColor
             opacity: network.wifiConnected ? 1 : 0.45
+            font.pixelSize: Theme.iconSize - 2
         }
     }
 

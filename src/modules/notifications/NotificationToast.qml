@@ -94,6 +94,8 @@ PanelWindow {
         anchors.fill: parent
         radius: toast.panelRadius
         color: Qt.rgba(Theme.bgColor.r, Theme.bgColor.g, Theme.bgColor.b, Theme.bgOpacity)
+        border.width: Theme.popupBorderWidth
+        border.color: Theme.popupBorderColor
     }
 
     Column {

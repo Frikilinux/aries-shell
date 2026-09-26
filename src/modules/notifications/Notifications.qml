@@ -21,8 +21,12 @@ Item {
 
     readonly property bool dndOn: NotificationService.dnd
     readonly property int unread: NotificationService.unread
+    // An unread critical notification outranks DND: it is the only visible
+    // signal when toasts are suppressed (DND) or simply not looked at yet.
+    readonly property bool critical: NotificationService.unreadCritical
 
-    implicitWidth: indicator.implicitWidth + (badge.visible ? badge.implicitWidth + 3 : 0)
+    // Icon only: the unread count rides on a badge overlaid on the corner.
+    implicitWidth: indicator.implicitWidth
     implicitHeight: indicator.implicitHeight
 
     // Module is visible only if outputs property is unset, matches this output, or contains it
@@ -32,24 +36,37 @@ Item {
         id: indicator
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
-        // bell-off while DND is on, bell otherwise
-        glyph: notifications.dndOn ? "\ue079" : "\ue07c"
-        color: Theme.fgBarColor
+        // bell-urgent for unread critical, bell-off while DND is on, bell otherwise
+        glyph: notifications.critical ? "\ue07b" : (notifications.dndOn ? "\ue07a" : "\ue07c")
+        color: notifications.critical ? Theme.urgencyCriticalColor : Theme.fgBarColor
         opacity: (notifications.unread > 0 || notifications.dndOn) ? 1 : 0.6
     }
 
-    Text {
+    // Unread count: circular badge pinned to the icon's top-left corner. It grows
+    // into a pill for multi-digit counts.
+    Rectangle {
         id: badge
-        anchors.left: indicator.right
-        anchors.leftMargin: 3
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.left: indicator.left
+        anchors.top: indicator.top
+        anchors.leftMargin: -3
+        anchors.topMargin: -3
+        width: Math.max(13, badgeText.implicitWidth + 6)
+        height: 13
+        radius: height / 2
         visible: notifications.unread > 0
-        text: notifications.unread > 99 ? "99+" : String(notifications.unread)
         color: Theme.accentColor
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSize - 3
-        font.bold: true
-        font.features: ({ "tnum": 1 })
+        border.color: Theme.bgBarColor
+
+        Text {
+            id: badgeText
+            anchors.centerIn: parent
+            text: notifications.unread > 99 ? "99+" : String(notifications.unread)
+            color: Theme.bgBarColor
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize - 8
+            font.bold: true
+            font.features: ({ "tnum": 1 })
+        }
     }
 
     MouseArea {

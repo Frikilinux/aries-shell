@@ -28,7 +28,7 @@ Item {
         style: bluetooth.iconStyle
         color: Theme.fgBarColor
         opacity: popup.adapterEnabled ? (popup.connectedCount > 0 ? 1 : 0.6) : 0.35
-        font.pixelSize: Math.round(Theme.iconSize * 1.1)
+        font.pixelSize: Math.round(Theme.iconSize * 1)
     }
 
     MouseArea {

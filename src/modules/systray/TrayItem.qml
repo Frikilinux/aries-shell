@@ -1,6 +1,6 @@
 import QtQuick
-import Quickshell
-import Quickshell.Services.SystemTray
+// import Quickshell
+// import Quickshell.Services.SystemTray
 
 // A single system tray icon button: left click activates, middle click performs
 // the secondary action, the wheel scrolls, and right click opens the item's
@@ -13,7 +13,8 @@ Item {
     // The SystemTrayItem this button represents
     required property var item
     // Size of the icon glyph in px
-    property int iconSize: 10
+    property int iconSize: 5
+
     // Extra hover area around the icon (does not affect layout size)
     property int itemPadding: 5
 

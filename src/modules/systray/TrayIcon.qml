@@ -1,4 +1,5 @@
 import QtQuick
+import "../theme"
 
 // Renders one system tray icon. Quickshell's SystemTray service already
 // resolves each `item.icon` to a loadable source: `image://icon/<name>` for
@@ -12,7 +13,7 @@ Item {
     // Icon source reported by the tray item
     property string name: ""
     // Displayed size of the icon in px
-    property int iconSize: 17
+    property int iconSize: 10
 
     // True once the icon rendered successfully
     readonly property bool resolved: iconImage.status === Image.Ready

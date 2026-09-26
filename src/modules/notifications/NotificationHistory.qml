@@ -149,7 +149,8 @@ BarPopup {
             spacing: 12
 
             HeaderButton {
-                glyph: NotificationService.dnd ? "\ue079" : "\ue07a" // bell-off / bell-snooze
+                // glyph: NotificationService.dnd ? "\ue079" : "\ue07a" // bell-off / bell-snooze
+                glyph: "\ue07a"
                 tint: NotificationService.dnd ? Theme.accentColor : Theme.fgColorMuted
                 onClicked: NotificationService.toggleDnd()
             }

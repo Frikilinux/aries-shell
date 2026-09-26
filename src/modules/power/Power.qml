@@ -13,8 +13,6 @@ Item {
 
     // The popup window, exposed so shell.qml can configure it (e.g. popup.iconStyle)
     property alias popup: popupWindow
-    // Icon style used by this module's bar icon. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
 
     implicitWidth: indicator.implicitWidth
     implicitHeight: indicator.implicitHeight
@@ -25,9 +23,8 @@ Item {
     Icon {
         id: indicator
         glyph: "\ue035" // power
-        style: power.iconStyle
         color: Theme.fgBarColor
-        font.pixelSize: Math.round(Theme.iconSize * 1.1)
+        font.pixelSize: Theme.iconSize
     }
 
     MouseArea {

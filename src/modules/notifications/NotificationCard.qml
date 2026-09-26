@@ -23,11 +23,34 @@ Item {
 
     readonly property color borderColor: Theme.urgencyColor(card.entry.urgency)
 
-    // Resolve the app icon: a themed icon name -> a path; anything else (an
-    // absolute path or a URL the client sent) is used as-is.
+    // Resolve the header icon. The client-sent image (`image-path`/`image-data`,
+    // i.e. `notify-send -i`) takes priority over the app icon; a themed icon name
+    // becomes a path, anything else (URL/path) is used as-is. "" = no icon, so the
+    // letter tile shows.
     readonly property string iconSource: {
         const e = card.entry
-        if (!e || e.appIcon === "")
+        if (!e)
+            return ""
+
+        const img = e.image
+        if (img !== "") {
+            const prefix = "image://icon/"
+            if (img.startsWith(prefix)) {
+                // Quickshell only builds this URL for image-path values that are
+                // not file: URLs, so the suffix is the raw theme name or path.
+                const raw = img.slice(prefix.length)
+                if (raw.startsWith("/"))
+                    return "file://" + raw
+                const themed = Quickshell.iconPath(raw, true)
+                if (themed !== "")
+                    return themed
+            } else {
+                // Inline image data (image://qsimage/...) or a file: URL.
+                return img
+            }
+        }
+
+        if (e.appIcon === "")
             return ""
         const p = Quickshell.iconPath(e.appIcon, true)
         return p !== "" ? p : e.appIcon

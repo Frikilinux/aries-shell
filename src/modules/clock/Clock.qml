@@ -24,7 +24,7 @@ Item {
     property color color: Theme.fgBarColor
     property string fontFamily: Theme.fontFamily
     property int fontSize: Theme.fontSize
-    property int spacing: Theme.spacing
+    property int spacing: Theme.spacing - 2
 
     // Keep digits the same width (OpenType "tnum") so the time doesn't jitter
     property bool tabularNumbers: true

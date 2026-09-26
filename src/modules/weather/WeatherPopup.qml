@@ -6,7 +6,7 @@ import "../popup"
 BarPopup {
     id: popup
 
-    popupWidth: 310
+    popupWidth: 320
 
     // Icon style used by this popup's icons. Defaults to Theme.iconStyle.
     property string iconStyle: Theme.iconStyle
@@ -51,10 +51,11 @@ BarPopup {
 
         Column {
             anchors.fill: parent
-            anchors.topMargin: 8
-            anchors.bottomMargin: 8
-            anchors.leftMargin: 4
-            anchors.rightMargin: 4
+            anchors.margins: 4
+            // anchors.topMargin: 8
+            // anchors.bottomMargin: 8
+            // anchors.leftMargin: 4
+            // anchors.rightMargin: 4
             spacing: 4
 
             Text {
@@ -71,7 +72,7 @@ BarPopup {
                 anchors.horizontalCenter: parent.horizontalCenter
                 glyph: WeatherService.iconGlyphFor(parent.parent.modelData.weather[0].icon)
                 style: popup.iconStyle
-                font.pixelSize: Theme.iconSize + 4
+                font.pixelSize: Math.round( Theme.iconSize * 2 )
             }
 
             Text {
@@ -144,7 +145,7 @@ BarPopup {
             anchors.verticalCenter: parent.verticalCenter
             glyph: WeatherService.failed ? "\ue049" : WeatherService.iconGlyph
             style: popup.iconStyle
-            font.pixelSize: Theme.iconSize + 32
+            font.pixelSize: Math.round(Theme.iconSize * 3)
             opacity: WeatherService.available ? 1 : 0.4
         }
 

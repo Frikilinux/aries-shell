@@ -539,9 +539,8 @@ BarPopup {
             id: vpnHeaderCard
             width: parent.width
             radius: 6
-            color: Qt.rgba(Theme.fgBarColor.b, Theme.fgBarColor.b, Theme.fgBarColor.b, 0.1)
+            color: Qt.rgba(Theme.fgBarColor.r, Theme.fgBarColor.g, Theme.fgBarColor.b, 0.1)
             implicitHeight: vpnHeaderColumn.implicitHeight
-
 
             Column {
                 id: vpnHeaderColumn
@@ -770,12 +769,12 @@ BarPopup {
             spacing: 4
 
             // Header card: header row + the connected AP info share one
-            // `bgColorMuted` background so the AP looks attached to the header.
+            // foreground-tinted background so the AP looks attached to the header.
             Rectangle {
                 id: headerCard
                 width: parent.width
                 radius: 6
-                color: Qt.rgba(Theme.fgBarColor.b, Theme.fgBarColor.b, Theme.fgBarColor.b, 0.1)
+                color: Qt.rgba(Theme.fgBarColor.r, Theme.fgBarColor.g, Theme.fgBarColor.b, 0.1)
                 implicitHeight: headerColumn.implicitHeight
 
                 Column {

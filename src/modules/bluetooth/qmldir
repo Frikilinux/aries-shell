@@ -1,3 +1,4 @@
 module modules.bluetooth
 Bluetooth 1.0 Bluetooth.qml
 BluetoothPopup 1.0 BluetoothPopup.qml
+DeviceIcons 1.0 DeviceIcons.qml

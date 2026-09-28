@@ -13,6 +13,9 @@ BarPopup {
     // Icon style used by this popup's icons. Defaults to Theme.iconStyle.
     property string iconStyle: Theme.iconStyle
 
+    // Per-device icon overrides (see DeviceIcons.qml)
+    DeviceIcons { id: deviceIcons }
+
     readonly property var adapter: Bluetooth.defaultAdapter
     readonly property bool adapterEnabled: adapter !== null && adapter.enabled
     readonly property bool discovering: adapter !== null && adapter.discovering
@@ -54,35 +57,6 @@ BarPopup {
         if (dev.deviceName && dev.deviceName !== "")
             return dev.deviceName
         return dev.address
-    }
-
-    function deviceGlyph(dev) {
-        const i = dev.icon
-        if (i === "audio-headset" || i === "audio-headphones")
-            return "\ue030" // headphones
-        if (i === "audio-card")
-            return "\ue03e" // speaker-box
-        if (i === "input-mouse")
-            return "\ue06a" // mouse-simple
-        if (i === "input-keyboard")
-            return "\ue06d" // keyboard
-        if (i === "input-gaming" || i === "input-joystick")
-            return "\ue073" // xbox-controller
-        if (i === "input-tablet")
-            return "\ue072" // tablet
-        if (i === "phone")
-            return "\ue033" // phone
-        if (i === "camera-video")
-            return "\ue047" // video-bluetooth
-        if (i === "camera-photo")
-            return "\ue06b" // camera
-        if (i === "printer")
-            return "\ue06f" // print
-        if (i === "computer")
-            return "\ue06e" // laptop
-        if (i === "multimedia-player")
-            return "\ue06c" // headphones-sound-wave
-        return "\ue024" // bluetooth
     }
 
     // Battery glyph for a device. BlueZ reports a 0..1 fraction.
@@ -246,10 +220,12 @@ BarPopup {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 18
                 horizontalAlignment: Text.AlignHCenter
-                glyph: popup.deviceGlyph(deviceRow.modelData)
+                glyph: deviceIcons.glyph(deviceRow.modelData)
                 style: popup.iconStyle
                 color: deviceRow.connected ? Theme.accentColor : Theme.fgColor
                 opacity: deviceRow.connected ? 1 : 0.6
+                font.pixelSize: 20
+
             }
 
             Column {

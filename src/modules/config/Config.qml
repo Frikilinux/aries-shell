@@ -111,7 +111,7 @@ Singleton {
             activeWindow: { outputs: ["primary"], maxLabelWidth: 200, appNames: {} },
             mpris:        { outputs: ["primary"], maxLabelWidth: 180 },
             systray:      { outputs: ["primary"] },
-            bluetooth:    { outputs: ["primary"] },
+            bluetooth:    { outputs: ["primary"], deviceIcons: {} },
             network:      { outputs: ["primary"] },
             volume:       { outputs: ["primary"], scrollStep: 0.03, naturalScroll: true,
                             osd: { enabled: true, timeout: 1500, x: "center", y: "center" } },
@@ -150,9 +150,10 @@ Singleton {
     // Merge `over` into `base`, following the base schema (unknown keys in
     // `over` are dropped, so typos don't slip into settings). Plain objects are
     // recursed; everything else (scalars, arrays) takes the user's value as-is.
-    // Map keys passed in `additive` (e.g. appNames) are additive key→value
-    // maps: the user's entries are merged ON TOP of the defaults, so new appIds
-    // the user adds are kept instead of being dropped as unknown keys.
+    // Map keys passed in `additive` (appNames, deviceIcons) are additive
+    // key->value maps: the user's entries are merged ON TOP of the defaults,
+    // so new appIds/devices the user adds are kept instead of being dropped
+    // as unknown keys.
     function merge(base, over, additive) {
         if (over === undefined || over === null || typeof over !== "object")
             return over
@@ -179,7 +180,7 @@ Singleton {
     // Replace the canonical settings with a (re)merge, then wake up the bound
     // widgets via `revision`. Also called after save()/update() to refresh.
     function apply(over) {
-        root.settings = over === undefined ? root.defaults : root.merge(root.defaults, over, { appNames: true })
+        root.settings = over === undefined ? root.defaults : root.merge(root.defaults, over, { appNames: true, deviceIcons: true })
         root.ready = true
         root.revision++
         root.syncWatch()

@@ -100,6 +100,25 @@ BarPopup {
             dev.pair()
     }
 
+    // BlueZ only scans while a client asks for it, so discover new devices
+    // while the popup is open and stop when it closes (mirrors Network's
+    // scannerEnabled; the bar glyph follows via `discovering`).
+    // `scanStartedByUs` avoids stopping a scan started by another client.
+    property bool scanStartedByUs: false
+
+    function popupOpened() {
+        if (adapter === null || !adapter.enabled)
+            return
+        scanStartedByUs = !adapter.discovering
+        adapter.discovering = true
+    }
+
+    function popupClosed() {
+        if (adapter !== null && scanStartedByUs)
+            adapter.discovering = false
+        scanStartedByUs = false
+    }
+
     Process {
         id: settingsApp
         command: ["overskride"]

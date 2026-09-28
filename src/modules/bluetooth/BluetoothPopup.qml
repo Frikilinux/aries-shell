@@ -97,7 +97,7 @@ BarPopup {
         else if (dev.paired || dev.bonded)
             dev.connect()
         else
-            dev.pair()
+            PairingAgent.pair(dev)
     }
 
     // BlueZ only scans while a client asks for it, so discover new devices
@@ -107,6 +107,7 @@ BarPopup {
     property bool scanStartedByUs: false
 
     function popupOpened() {
+        PairingAgent.open()
         if (adapter === null || !adapter.enabled)
             return
         scanStartedByUs = !adapter.discovering
@@ -114,9 +115,20 @@ BarPopup {
     }
 
     function popupClosed() {
+        PairingAgent.close()
         if (adapter !== null && scanStartedByUs)
             adapter.discovering = false
         scanStartedByUs = false
+    }
+
+    // A confirmation arriving for a collapsed device reveals its row, so the
+    // passkey and the accept/cancel buttons are where the click happened.
+    Connections {
+        target: PairingAgent
+        function onPendingChanged() {
+            if (PairingAgent.pending && PairingAgent.address !== "")
+                popup.expandedAddress = PairingAgent.address
+        }
     }
 
     Process {
@@ -208,6 +220,9 @@ BarPopup {
         readonly property bool connected: modelData.connected
         readonly property bool hasBattery: modelData.batteryAvailable
         readonly property bool expanded: deviceRow.connected || popup.isExpanded(modelData)
+        // A pairing confirmation is pending for this device.
+        readonly property bool pairPrompt: PairingAgent.pending
+            && PairingAgent.address === modelData.address
         width: popup.contentWidth
         height: Math.max(popup.collapsedRowHeight, deviceInfo.implicitHeight + 10)
         radius: 6
@@ -262,10 +277,47 @@ BarPopup {
                     elide: Text.ElideRight
                 }
 
+                // Pairing confirmation: the passkey, then accept/cancel.
+                // Shown even on a collapsed row (PairingAgent expands it).
+                Column {
+                    visible: deviceRow.pairPrompt
+                    width: parent.width
+                    spacing: 4
+
+                    Text {
+                        width: parent.width
+                        text: "Pairing code " + PairingAgent.code
+                        color: Theme.accentColor
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
+                        font.bold: true
+                    }
+
+                    Row {
+                        width: parent.width
+                        height: 20
+                        spacing: 6
+
+                        Chip {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Cancel"
+                            onClicked: PairingAgent.cancel()
+                        }
+
+                        Chip {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Accept"
+                            active: true
+                            onClicked: PairingAgent.accept()
+                        }
+                    }
+                }
+
                 // Info row 1: battery level (icon + %) and MAC address.
                 Row {
                     id: infoRow
-                    visible: deviceRow.expanded
+                    // The pairing confirmation replaces the info lines.
+                    visible: deviceRow.expanded && !deviceRow.pairPrompt
                     width: parent.width
                     height: Theme.fontSize
                     spacing: 10
@@ -308,7 +360,7 @@ BarPopup {
                 // Info row 2: paired / trusted / blocked flags.
                 // trusted and blocked are writable; paired is read-only.
                 Row {
-                    visible: deviceRow.expanded
+                    visible: deviceRow.expanded && !deviceRow.pairPrompt
                     width: parent.width
                     height: 20
                     spacing: 4

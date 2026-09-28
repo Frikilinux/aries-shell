@@ -1,4 +1,5 @@
 module modules.bluetooth
+singleton PairingAgent 1.0 PairingAgent.qml
 Bluetooth 1.0 Bluetooth.qml
 BluetoothPopup 1.0 BluetoothPopup.qml
 DeviceIcons 1.0 DeviceIcons.qml

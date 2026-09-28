@@ -19,6 +19,11 @@ BarPopup {
         NotificationService.markRead()
     }
 
+    // Register with the IPC control surface so a keybind can open/close this
+    // popup (see NotificationIpc.qml).
+    Component.onCompleted: NotificationIpc.registerPopup(popup)
+    Component.onDestruction: NotificationIpc.unregisterPopup(popup)
+
     // Small labelled icon button used in the header.
     component HeaderButton: Icon {
         id: button

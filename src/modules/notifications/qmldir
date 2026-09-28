@@ -1,5 +1,6 @@
 module modules.notifications
 singleton NotificationService 1.0 NotificationService.qml
+singleton NotificationIpc 1.0 NotificationIpc.qml
 Notifications 1.0 Notifications.qml
 NotificationHistory 1.0 NotificationHistory.qml
 NotificationToast 1.0 NotificationToast.qml

@@ -16,6 +16,7 @@ BarPopup {
     maxContentHeight: popup.screen ? Math.round(popup.screen.height * 0.75) : 540
 
     readonly property var devices: NetworkDevices.devices
+    readonly property var devHeaderBgColor: Qt.rgba(Theme.fgBarColor.r, Theme.fgBarColor.g, Theme.fgBarColor.b, 0.07)
     // Ordered internal-first: eth internal, eth external, wifi internal, wifi external.
     readonly property var deviceSections: NetworkDevices.ordered
 
@@ -539,7 +540,10 @@ BarPopup {
             id: vpnHeaderCard
             width: parent.width
             radius: 6
-            color: Qt.rgba(Theme.fgBarColor.r, Theme.fgBarColor.g, Theme.fgBarColor.b, 0.1)
+            color: popup.devHeaderBgColor
+            // color: Qt.rgba(Theme.bgColorMuted.r, Theme.bgColorMuted.g, Theme.bgColorMuted.b, 0.1)
+            border.width: 1
+            border.color: Theme.buttonBorder
             implicitHeight: vpnHeaderColumn.implicitHeight
 
             Column {
@@ -774,9 +778,10 @@ BarPopup {
                 id: headerCard
                 width: parent.width
                 radius: 6
-                color: Qt.rgba(Theme.fgBarColor.r, Theme.fgBarColor.g, Theme.fgBarColor.b, 0.1)
+                color: popup.devHeaderBgColor
                 implicitHeight: headerColumn.implicitHeight
-
+                border.width: 1
+                border.color: Theme.buttonBorder
                 Column {
                     id: headerColumn
                     width: parent.width

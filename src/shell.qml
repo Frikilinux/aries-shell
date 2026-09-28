@@ -105,8 +105,9 @@ ShellRoot {
 
     // Desktop wallpaper + transparent click-catcher (one module, two surfaces):
     // the background-layer wallpaper also lives in niri's Overview backdrop and
-    // ignores input, so a separate bottom-layer scrim does the popup dismissal
-    // on empty-desktop clicks. Screens filtered via Config.outputs("wallpaper").
+    // ignores input, so a separate top-layer scrim (below the popups, above the
+    // windows) does the popup dismissal on outside clicks. Screens filtered via
+    // Config.outputs("wallpaper").
     Variants {
         model: Quickshell.screens
         Wallpaper {

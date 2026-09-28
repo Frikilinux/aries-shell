@@ -14,10 +14,13 @@ import "../popup"
 //    Backdrop surfaces ignore ALL input, so popup dismissal can never live here
 //    — that's what the scrim surface is for.
 //
-//  * scrim (Bottom layer, ns "aries-scrim"): transparent click-catcher shown
-//    only while a popup/tray menu is open, closing it on a real outside click.
-//    Formerly the standalone PopupScrim; kept below windows so window clicks
-//    still reach the windows.
+//  * scrim (Top layer, ns "aries-scrim"): transparent full-screen layer shown
+//    only while a popup/tray menu is open. It sits ABOVE windows but BELOW the
+//    Overlay-layer popups, so while a popup is open hover never reaches a
+//    window (focus-follows-mouse can't retarget focus), a click outside the
+//    popup closes it, and the popups themselves stay fully interactive. The bar
+//    strip is left uncovered, so the bar keeps its own clicks. Its unique
+//    namespace lets niri's layer-rules skip the global blur/shadow for it.
 Item {
     id: root
 
@@ -125,35 +128,46 @@ Item {
     }
 
     // ------------------------------------------------------------------- scrim
-    // Transparent, click-catching layer surface shown while a bar popup or tray
-    // menu is open (`Popups.current != null`), so the popup dismisses on a real
-    // click on the empty desktop. niri's focus-follows-mouse fires WindowFocusChanged
-    // on plain hover (and already focuses windows before any click), so popups must
-    // NOT dismiss on focus change — only on actual input. Living on the Bottom
-    // layer: it never occludes or intercepts anything above it (windows, bar,
-    // popups, menus), yet still receives clicks on empty desktop. Keyboard stays
-    // None; popups manage their own focus.
+    // Transparent layer surface shown while a bar popup or tray menu is open
+    // (`Popups.current != null`): it covers the whole screen below the bar, so
+    // a click anywhere outside the popup dismisses it AND hover never reaches a
+    // window underneath. niri's focus-follows-mouse fires WindowFocusChanged on
+    // plain hover (and already focuses windows before any click), so popups must
+    // NOT dismiss on focus change — only on actual input; covering the windows
+    // is also what keeps the mouse from retargeting focus while a popup is open.
+    // Top layer puts it above windows but below the Overlay-layer popups/menus
+    // (which therefore keep receiving input). The bar strip is excluded
+    // geometrically, so the two Top surfaces never overlap and the bar keeps its
+    // clicks; that also makes the stacking order between them irrelevant.
+    // Keyboard stays None; popups manage their own focus.
     PanelWindow {
         id: scrim
         screen: root.modelData
 
         color: "transparent"
+        // Cover EVERY screen while a popup/menu is open. Limiting this to the
+        // popup's own screen left the other outputs uncovered, so moving the
+        // pointer onto a window there hit focus-follows-mouse (focus change ->
+        // popup closed). A popup is modal, so covering all outputs is correct.
         visible: Popups.current !== null
 
-        WlrLayershell.layer: WlrLayer.Bottom
+        WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "aries-scrim"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        // Full-desktop surface must not push any window out of the way.
-        WlrLayershell.exclusiveZone: 0
+        // Never reserve space and never dodge other panels (bar included): the
+        // geometry below is exact, and windows are never pushed around.
+        exclusionMode: ExclusionMode.Ignore
 
+        // Full width, from just under the bar down to the bottom edge, so the
+        // bar strip stays free for its own clicks (toggle/close popups).
         anchors {
-            top: true
             bottom: true
             left: true
             right: true
         }
+        implicitHeight: root.modelData.height - Config.settings.bar.height
 
-        // Any click on empty desktop: close the popup/menu.
+        // Any click outside the popup/menu: close it.
         MouseArea {
             anchors.fill: parent
             onClicked: Popups.closeAll()

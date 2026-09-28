@@ -164,14 +164,13 @@ Singleton {
                 ? Object.assign({}, w, { is_urgent: e.urgent })
                 : w)
         } else if (ev.WindowFocusChanged) {
-            // A toplevel window got focused (e.g. clicked): dismiss the open
-            // popup/menu. Requires focus-follows-mouse OFF — with it on, the
-            // event fires on plain hover and would close popups while the user
-            // just moves the pointer (windows are also pre-focused by it, so
-            // window clicks produce no new event anyway).
-            const id = ev.WindowFocusChanged.id
-            if (id !== null)
-                Popups.closeAll()
+            // Deliberately do NOT dismiss popups on window focus changes.
+            // With focus-follows-mouse enabled this event fires on plain hover
+            // (and niri pre-focuses a window before the click lands), which
+            // would close a popup the instant the pointer leaves it — e.g.
+            // over a window on another output. Outside clicks are handled by
+            // the transparent scrim layer (Wallpaper.qml), the bar's own
+            // MouseArea, and Esc instead.
         }
     }
 }

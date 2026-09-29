@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Notifications
 import "../config"
+import "../niri"
 
 // Notification backend: the single org.freedesktop.Notifications server for the
 // whole shell, plus the in-memory history and its on-disk cache.
@@ -201,7 +202,10 @@ Singleton {
             entry.timer.restart()
     }
 
-    // Invoke an action button on a live toast, then hide it.
+    // Invoke an action button on a live toast, then hide it. Niri does not raise
+    // the app window when the client handles its own action (e.g. Vesktop's
+    // "View" jumps to the message but stays in the background), so focus the
+    // originating app window afterwards.
     function invokeAction(id, identifier) {
         const entry = root.entryById(id)
         if (entry === null)
@@ -214,8 +218,18 @@ Singleton {
                     break
                 }
             }
+            root.focusSourceApp(entry)
         }
         root.dismissEntry(id)
+    }
+
+    // Focus the window that sent `entry`, matching its desktop entry / app name
+    // against niri's windows. No-op when niri is unavailable or nothing matches
+    // (e.g. a notify-send script with no window).
+    function focusSourceApp(entry) {
+        if (!Niri.available)
+            return
+        Niri.focusApp([entry.desktopEntry, entry.appName])
     }
 
     // ------------------------------------------------------- server handler

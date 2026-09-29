@@ -91,13 +91,77 @@ Singleton {
         send({ Action: { FocusWorkspace: { reference: { Id: id } } } })
     }
 
+    // Focus a window by niri id (switches to its workspace too).
+    function focusWindow(id) {
+        send({ Action: { FocusWindow: { id: id } } })
+    }
+
+    // Normalize a string for fuzzy app matching: lowercase, alphanumerics only.
+    function normalizeApp(s) {
+        return String(s === null || s === undefined ? "" : s)
+            .toLowerCase().replace(/[^a-z0-9]+/g, "")
+    }
+
+    // Focus the most recently focused window whose app_id matches any candidate
+    // (e.g. a notification's desktopEntry / appName). Exact normalized matches
+    // win over substring ones; ties break on recency. Returns true if focused.
+    function focusApp(candidates) {
+        const needles = (Array.isArray(candidates) ? candidates : [candidates])
+            .map(root.normalizeApp).filter(n => n.length >= 3)
+        if (needles.length === 0)
+            return false
+        const hit = root._bestAppWindow(needles, false)
+            || root._bestAppWindow(needles, true)
+        if (hit === null)
+            return false
+        root.focusWindow(hit)
+        return true
+    }
+
+    function _appMatches(appId, needles, loose) {
+        if (appId === "")
+            return false
+        for (let i = 0; i < needles.length; i++) {
+            const n = needles[i]
+            if (appId === n)
+                return true
+            if (loose && (appId.indexOf(n) !== -1 || n.indexOf(appId) !== -1))
+                return true
+        }
+        return false
+    }
+
+    function _bestAppWindow(needles, loose) {
+        let best = null
+        let bestTs = -1
+        for (const id in root.windowIndex) {
+            const w = root.windowIndex[id]
+            if (!root._appMatches(w.appId, needles, loose))
+                continue
+            if (w.focusTs > bestTs) {
+                bestTs = w.focusTs
+                best = Number(id)
+            }
+        }
+        return best
+    }
+
+    function _focusTimestamp(t) {
+        return t ? (t.secs || 0) + (t.nanos || 0) / 1e9 : 0
+    }
+
     // Quit niri (ends the compositor session)
     function quit() {
         send({ Action: { Quit: {} } })
     }
 
     function indexWindow(win) {
-        root.windowIndex[win.id] = { workspaceId: win.workspace_id, urgent: win.is_urgent }
+        root.windowIndex[win.id] = {
+            workspaceId: win.workspace_id,
+            urgent: win.is_urgent,
+            appId: root.normalizeApp(win.app_id),
+            focusTs: root._focusTimestamp(win.focus_timestamp),
+        }
     }
 
     // A workspace is urgent if any of its windows is urgent (same rule as niri).
@@ -143,6 +207,12 @@ Singleton {
                 win.urgent = e.urgent
                 root.recomputeWorkspaceUrgency(win.workspaceId)
             }
+        } else if (ev.WindowFocusTimestampChanged) {
+            // Keeps focus recency fresh so focusApp() picks the right window.
+            const e = ev.WindowFocusTimestampChanged
+            const win = root.windowIndex[e.id]
+            if (win)
+                win.focusTs = root._focusTimestamp(e.focus_timestamp)
         } else if (ev.WorkspaceActivated) {
             const e = ev.WorkspaceActivated
             const target = root.workspaces.find(w => w.id === e.id)

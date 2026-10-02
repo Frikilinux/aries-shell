@@ -1,0 +1,4 @@
+module modules.power
+singleton PowerService 1.0 PowerService.qml
+Power 1.0 Power.qml
+PowerPopup 1.0 PowerPopup.qml

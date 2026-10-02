@@ -61,9 +61,13 @@ Singleton {
         return list
     }
 
+    // Cached transition list: rebuilt once per minute (boundaries only move on
+    // minute precision) so the per-second countdown never re-sorts it.
+    readonly property var transitionList: root.transitions()
+
     // Epoch ms of the next off-peak/peak switch.
     function nextTransition() {
-        const list = root.transitions()
+        const list = root.transitionList
         const t = root.nowMinute.getTime()
         for (let i = 0; i < list.length; i++) {
             if (list[i] > t)
@@ -76,7 +80,7 @@ Singleton {
 
     // Merged off-peak/peak windows, starting with the current one.
     function windows(count) {
-        const list = root.transitions()
+        const list = root.transitionList
         const t = root.nowMinute.getTime()
         let idx = 0
         while (idx < list.length && list[idx] <= t)

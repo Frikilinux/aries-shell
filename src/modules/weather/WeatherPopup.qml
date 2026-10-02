@@ -8,9 +8,6 @@ BarPopup {
 
     popupWidth: 320
 
-    // Icon style used by this popup's icons. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
-
     // One label/value line in the details list
     component DetailRow: Item {
         required property string label
@@ -71,7 +68,6 @@ BarPopup {
             Icon {
                 anchors.horizontalCenter: parent.horizontalCenter
                 glyph: WeatherService.iconGlyphFor(parent.parent.modelData.weather[0].icon)
-                style: popup.iconStyle
                 font.pixelSize: Math.round( Theme.iconSize * 2 )
             }
 
@@ -114,7 +110,6 @@ BarPopup {
 
             Icon {
                 glyph: "\ue01a" // arrow-clockwise (refresh)
-                style: popup.iconStyle
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
@@ -124,7 +119,6 @@ BarPopup {
 
             Icon {
                 glyph: "\ue02f" // dismiss
-                style: popup.iconStyle
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
@@ -144,7 +138,6 @@ BarPopup {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             glyph: WeatherService.failed ? "\ue049" : WeatherService.iconGlyph
-            style: popup.iconStyle
             font.pixelSize: Math.round(Theme.iconSize * 3)
             opacity: WeatherService.available ? 1 : 0.4
         }

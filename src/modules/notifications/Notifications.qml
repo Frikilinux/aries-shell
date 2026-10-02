@@ -14,10 +14,8 @@ Item {
     // The output being rendered.
     property string output: ""
 
-    // The popup window, exposed so shell.qml can configure it (e.g. popup.iconStyle)
+    // The popup window, exposed for shell.qml.
     property alias popup: historyPopup
-    // Icon style used by this module's bar icon. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
 
     readonly property bool dndOn: NotificationService.dnd
     readonly property int unread: NotificationService.unread
@@ -84,6 +82,5 @@ Item {
     NotificationHistory {
         id: historyPopup
         anchorItem: notifications
-        iconStyle: notifications.iconStyle
     }
 }

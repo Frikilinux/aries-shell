@@ -1,11 +1,12 @@
 import QtQuick
 import "../theme"
 
+// Small toggle switch. Uses the built-in Item.enabled for the disabled state
+// (disables the MouseArea via inheritance, 40% opacity).
 Item {
     id: root
 
     property bool checked: false
-    property bool enabled: true
     property color activeColor: Theme.accentColor
     property color trackColor: Theme.fgColor
 
@@ -42,8 +43,7 @@ Item {
 
     MouseArea {
         anchors.fill: parent
-        enabled: root.enabled
-        cursorShape: Qt.PointingHandCursor
+        cursorShape: root.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: root.toggled()
     }
 }

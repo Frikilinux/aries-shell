@@ -13,10 +13,8 @@ Item {
 
     readonly property int spacing: Theme.spacing
 
-    // The popup window, exposed so shell.qml can configure it (e.g. popup.iconStyle)
+    // The popup window, exposed for shell.qml.
     property alias popup: popupWindow
-    // Icon style used by this module's bar icon. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
 
     implicitWidth: indicator.implicitWidth
         + (WeatherService.available ? tempLabel.implicitWidth : 0)
@@ -30,7 +28,6 @@ Item {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         glyph: WeatherService.iconGlyph
-        style: weather.iconStyle
         color: Theme.fgBarColor
         opacity: WeatherService.available ? 1 : 0.5
     }

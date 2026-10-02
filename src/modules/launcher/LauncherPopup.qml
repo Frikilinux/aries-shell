@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import "../theme"
 import "../icon"
 import "../popup"

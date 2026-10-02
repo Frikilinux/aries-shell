@@ -9,9 +9,6 @@ import "../widgets"
 BarPopup {
     id: popup
 
-    // Icon style used by this popup's icons. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
-
     // Never taller than 75% of the screen height.
     maxContentHeight: popup.screen ? Math.round(popup.screen.height * 0.75) : 540
 
@@ -373,13 +370,13 @@ BarPopup {
             model: NetworkDevices.wiredDevices
 
             delegate: Item {
-                id: watcher
+                id: wiredDelegate
                 required property var modelData
                 width: 0
                 height: 0
 
                 Connections {
-                    target: watcher.modelData
+                    target: wiredDelegate.modelData
 
                     function onHasLinkChanged() {
                         if (popup.visible)
@@ -431,13 +428,13 @@ BarPopup {
             model: NetworkDevices.wifiDevices
 
             delegate: Item {
-                id: watcher
+                id: wifiDelegate
                 required property var modelData
                 width: 0
                 height: 0
 
                 Connections {
-                    target: watcher.modelData
+                    target: wifiDelegate.modelData
 
                     function onConnectedChanged() {
                         if (popup.visible)
@@ -509,7 +506,6 @@ BarPopup {
 
             Icon {
                 glyph: "\ue071" // settings
-                style: popup.iconStyle
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
@@ -519,7 +515,6 @@ BarPopup {
 
             Icon {
                 glyph: "\ue02f" // dismiss
-                style: popup.iconStyle
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
@@ -809,7 +804,6 @@ BarPopup {
                                 }
                             }
                         }
-
 
                         Text {
                             id: devName

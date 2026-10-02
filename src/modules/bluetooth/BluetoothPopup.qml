@@ -10,9 +10,6 @@ import "../widgets"
 BarPopup {
     id: popup
 
-    // Icon style used by this popup's icons. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
-
     // Per-device icon overrides (see DeviceIcons.qml)
     DeviceIcons { id: deviceIcons }
 
@@ -158,7 +155,6 @@ BarPopup {
 
             Icon {
                 glyph: "\ue071" // settings
-                style: popup.iconStyle
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
@@ -168,7 +164,6 @@ BarPopup {
 
             Icon {
                 glyph: popup.stateGlyph // bluetooth power
-                style: popup.iconStyle
                 color: popup.adapterEnabled ? Theme.accentColor : Theme.fgColor
                 opacity: popup.adapter !== null ? (popup.adapterEnabled ? 1 : 0.45) : 0.3
                 MouseArea {
@@ -181,7 +176,6 @@ BarPopup {
 
             Icon {
                 glyph: "\ue02f" // dismiss
-                style: popup.iconStyle
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
@@ -255,7 +249,6 @@ BarPopup {
                 width: 18
                 horizontalAlignment: Text.AlignHCenter
                 glyph: deviceIcons.glyph(deviceRow.modelData)
-                style: popup.iconStyle
                 color: deviceRow.connected ? Theme.accentColor : Theme.fgColor
                 opacity: deviceRow.connected ? 1 : 0.6
                 font.pixelSize: 20
@@ -331,7 +324,6 @@ BarPopup {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: deviceRow.hasBattery
                         glyph: popup.deviceBatteryGlyph(deviceRow.modelData)
-                        style: popup.iconStyle
                         color: deviceRow.connected ? Theme.accentColor : Theme.fgColorMuted
                         font.pixelSize: Theme.fontSize
                     }

@@ -12,8 +12,7 @@ Item {
     // The output being rendered.
     required property string output
 
-    // Display-name overrides per appId (see AppNames.qml)
-    AppNames { id: appNames }
+    // Display-name overrides per appId (shared AppNames singleton)
 
     // Max width (px) the label before it truncates instead of overflowing
     property int maxLabelWidth: Config.settings.modules.activeWindow.maxLabelWidth
@@ -27,7 +26,7 @@ Item {
     readonly property string label: {
         if (!root.focusedToplevel)
             return ""
-        return root.capitalize(appNames.displayName(root.focusedToplevel.appId || ""))
+        return root.capitalize(AppNames.displayName(root.focusedToplevel.appId || ""))
     }
 
     // Internal: the toplevel chosen by updateFocused()

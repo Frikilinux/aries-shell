@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import Quickshell.Services.Mpris
 import Quickshell.Widgets
 import "../theme"
@@ -8,9 +7,6 @@ import "../popup"
 
 BarPopup {
     id: popup
-
-    // Icon style used by this popup's icons. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
 
     property int artSize: 180
 
@@ -53,6 +49,12 @@ BarPopup {
             width: parent.width
             height: parent.height
             source: popup.hasPlayer ? popup.player.trackArtUrl : ""
+            // Decode at display size (x dpr) instead of the art's natural
+            // resolution: caps decoded RAM per track. Async avoids blocking the
+            // UI thread on the track change.
+            sourceSize.width: popup.artSize * Screen.devicePixelRatio
+            sourceSize.height: popup.artSize * Screen.devicePixelRatio
+            asynchronous: true
             fillMode: Image.PreserveAspectFit
             cache: true
         }
@@ -72,7 +74,6 @@ BarPopup {
         Icon {
             anchors.centerIn: parent
             glyph: "\ue06c" // headphones-sound-wave (no album art)
-            style: popup.iconStyle
             font.pixelSize: 36
             color: Theme.fgColor
             opacity: 0.4
@@ -143,7 +144,6 @@ BarPopup {
             anchors.verticalCenter: parent.verticalCenter
             enabled: popup.player && popup.player.shuffleSupported
             glyph: "\ue021" // arrow-shuffle
-            style: popup.iconStyle
             color: popup.player && popup.player.shuffle ? Theme.accentColor : Theme.fgColor
             opacity: enabled ? (popup.player && popup.player.shuffle ? 1 : 0.5) : 0.35
             MouseArea {
@@ -160,7 +160,6 @@ BarPopup {
         Icon {
             anchors.verticalCenter: parent.verticalCenter
             glyph: "\ue036" // previous
-            style: popup.iconStyle
             color: Theme.fgColor
             enabled: popup.player && popup.player.canGoPrevious
             opacity: enabled ? 1 : 0.35
@@ -176,7 +175,6 @@ BarPopup {
             anchors.verticalCenter: parent.verticalCenter
             enabled: popup.player && popup.player.canTogglePlaying
             glyph: popup.isPlaying ? "\ue032" : "\ue034" // pause : play
-            style: popup.iconStyle
             color: Theme.fgColor
             font.pixelSize: Theme.iconSize + 6
             opacity: enabled ? 1 : 0.35
@@ -192,7 +190,6 @@ BarPopup {
             anchors.verticalCenter: parent.verticalCenter
             enabled: popup.player && popup.player.canGoNext
             glyph: "\ue031" // next
-            style: popup.iconStyle
             color: Theme.fgColor
             opacity: enabled ? 1 : 0.35
             MouseArea {
@@ -209,7 +206,6 @@ BarPopup {
             glyph: popup.player && popup.player.loopState === MprisLoopState.Track
                 ? "\ue01e" // arrow-repeat1 (repeat-1)
                 : "\ue01f" // arrow-repeat-all (repeat)
-            style: popup.iconStyle
             color: popup.player && popup.player.loopState !== MprisLoopState.None
                 ? Theme.accentColor : Theme.fgColor
             opacity: enabled ? (popup.player && popup.player.loopState !== MprisLoopState.None ? 1 : 0.5) : 0.35

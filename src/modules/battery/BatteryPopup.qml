@@ -6,9 +6,6 @@ import "../popup"
 BarPopup {
     id: popup
 
-    // Icon style used by this popup's icons. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
-
     // Selectable charge profiles (end threshold, %)
     property var profiles: [60, 80, 100]
 
@@ -90,7 +87,6 @@ BarPopup {
 
             Icon {
                 glyph: "\ue01a" // arrow-clockwise (refresh)
-                style: popup.iconStyle
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
@@ -100,7 +96,6 @@ BarPopup {
 
             Icon {
                 glyph: "\ue02f" // dismiss
-                style: popup.iconStyle
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
@@ -138,7 +133,6 @@ BarPopup {
                 id: summaryIcon
                 anchors.verticalCenter: parent.verticalCenter
                 glyph: BatteryService.batteryGlyph(BatteryService.percentage, BatteryService.pluggedIn)
-                style: popup.iconStyle
                 color: BatteryService.charging ? Theme.accentColor : Theme.fgColor
                 font.pixelSize: Math.round(34 * 1.5)
             }

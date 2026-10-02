@@ -7,9 +7,6 @@ import "../niri"
 BarPopup {
     id: popup
 
-    // Icon style used by this popup's icons. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
-
     // tileWidth is the minimum; tiles grow to fit the widest action label.
     property int tileWidth: 84
     property int tileHeight: 62
@@ -254,7 +251,6 @@ BarPopup {
                     Icon {
                         anchors.horizontalCenter: parent.horizontalCenter
                         glyph: popup.actionGlyph(tile.modelData)
-                        style: popup.iconStyle
                         font.pixelSize: Theme.iconSize + 8
                     }
 

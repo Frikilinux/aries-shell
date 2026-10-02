@@ -13,9 +13,6 @@ Item {
     // The output being rendered.
     property string output: ""
 
-    // Icon style used by this module's bar icon. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
-
     // Volume delta (0..1 fraction) applied per wheel step (from the user config)
     property real scrollStep: Config.settings.modules.volume.scrollStep
     // Set true when the system uses natural (inverted) scrolling so the module
@@ -51,7 +48,6 @@ Item {
     Icon {
         id: indicator
         glyph: volume.glyph
-        style: volume.iconStyle
         color: Theme.fgBarColor
         opacity: volume.muted ? 0.5 : 1
     }

@@ -12,10 +12,8 @@ Item {
     // The output being rendered.
     property string output: ""
 
-    // The popup window, exposed so shell.qml can configure it (e.g. popup.iconStyle)
+    // The popup window, exposed for shell.qml.
     property alias popup: popupWindow
-    // Icon style used by this module's bar icon. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
 
     // Below this percentage (and not charging) the icon turns urgent-colored
     property int lowThreshold: Config.settings.modules.battery.lowThreshold
@@ -42,7 +40,6 @@ Item {
         id: indicator
         // Battery level, with the bolt variant while the charger is plugged in
         glyph: BatteryService.batteryGlyph(battery.percent, battery.plugged)
-        style: battery.iconStyle
         color: battery.stateColor
         font.pixelSize: Math.round(Theme.iconSize * 1.4)
     }

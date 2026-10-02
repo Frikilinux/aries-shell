@@ -297,12 +297,37 @@ Singleton {
         onTriggered: root.refreshVpn()
     }
 
-    // Always-on poll so the bar badge tracks VPN state with the popup closed.
+    // VPN state changes are pushed by `nmcli monitor` (a single long-lived,
+    // cheap process) instead of polling every few seconds: any NetworkManager
+    // event line schedules a debounced refresh, so the bar badge tracks state
+    // with the popup closed at almost no cost. A slow fallback refresh covers
+    // external warp-cli changes and restarts the monitor if it ever exits.
+    Process {
+        id: nmMonitor
+        command: ["nmcli", "monitor"]
+        running: true
+        stdout: SplitParser {
+            onRead: vpnDebounce.restart()
+        }
+        Component.onCompleted: root.refreshVpn()
+    }
+
+    // Coalesces bursts of monitor lines into one state read.
     Timer {
-        interval: 10000
+        id: vpnDebounce
+        interval: 400
+        onTriggered: root.refreshVpn()
+    }
+
+    // Slow safety net (external warp-cli changes / dead monitor).
+    Timer {
+        interval: 60000
         repeat: true
         running: true
-        onTriggered: root.refreshVpn()
-        Component.onCompleted: root.refreshVpn()
+        onTriggered: {
+            if (!nmMonitor.running)
+                nmMonitor.running = true
+            root.refreshVpn()
+        }
     }
 }

@@ -13,9 +13,6 @@ Item {
     // The output being rendered.
     property string output: ""
 
-    // Icon style used by this module's bar icon. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
-
     // Max width (px) for each text label so they truncate instead of overflowing
     property int maxLabelWidth: Config.settings.modules.mpris.maxLabelWidth
 
@@ -48,7 +45,6 @@ Item {
         visible: !mpris.hasPlayer
         anchors.centerIn: parent
         glyph: "\ue074" // mdi-arch
-        style: mpris.iconStyle
         color: Theme.fgBarColor
         opacity: 0.5
     }

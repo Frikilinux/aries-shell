@@ -27,7 +27,6 @@ import "modules/offpeak"
 import "modules/notifications"
 import "modules/wallpaper"
 import "modules/launcher"
-import "modules/popup"
 import "modules/polkit"
 
 ShellRoot {
@@ -88,7 +87,6 @@ ShellRoot {
                             outputs: Config.outputs(Config.revision, "volume", modelData.name)
                         },
                         Battery {
-                            iconStyle: "light"
                             output: modelData.name
                             outputs: Config.outputs(Config.revision, "battery", modelData.name)
                         },
@@ -159,14 +157,4 @@ ShellRoot {
             // screen is bound to modelData inside LauncherPopup.
         }
     }
-
-    // Independent admin window (hidden by default)
-    // FloatingWindow {
-    //     id: controlCenter
-    //     visible: false
-    //     width: 400
-    //     height: 500
-
-    //     ControlCenterContent {}
-    // }
 }

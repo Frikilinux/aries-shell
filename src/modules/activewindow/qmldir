@@ -1,3 +1,4 @@
 module modules.activewindow
 ActiveWindow 1.0 ActiveWindow.qml
-AppNames 1.0 AppNames.qml
+singleton AppNames 1.0 AppNames.qml
+

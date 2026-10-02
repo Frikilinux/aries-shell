@@ -12,9 +12,6 @@ BarPopup {
     popupWidth: 400
     maxContentHeight: 460
 
-    // Icon style used by this popup's icons. Defaults to Theme.iconStyle.
-    property string iconStyle: Theme.iconStyle
-
     function popupOpened() {
         NotificationService.markRead()
     }

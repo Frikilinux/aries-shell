@@ -11,7 +11,7 @@ Item {
     // The output being rendered.
     property string output: ""
 
-    // The popup window, exposed so shell.qml can configure it (e.g. popup.iconStyle)
+    // The popup window, exposed for shell.qml.
     property alias popup: popupWindow
 
     implicitWidth: indicator.implicitWidth

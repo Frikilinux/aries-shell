@@ -22,6 +22,10 @@ PanelWindow {
     // Separation between the popup and the bar / the screen edge
     property int popupGap: 3
 
+    // Centre the popup on its screen instead of anchoring it to `anchorItem`
+    // (used by the launcher).
+    property bool centered: false
+
     // Popup dimensions
     property int popupWidth: 340
     property int maxContentHeight: 540
@@ -93,10 +97,29 @@ PanelWindow {
             popup.refreshItemPos()
     }
 
+    // A centred popup also needs its final height before it can be centred
+    // vertically; the content column lays out asynchronously after showing.
+    onImplicitHeightChanged: {
+        if (popup.visible)
+            popup.refreshItemPos()
+    }
+
     function refreshItemPos() {
         const win = popup.barWindow
         if (win === null)
             return
+
+        // Screen-centred popup (launcher): ignore the anchor item entirely.
+        if (popup.centered && popup.screen) {
+            const cx = Math.max(0, Math.round((popup.screen.width - popup.implicitWidth) / 2))
+            if (popup.margins.left !== cx)
+                popup.margins.left = cx
+            const cy = Math.max(0, Math.round((popup.screen.height - popup.implicitHeight) / 2))
+            if (popup.margins.top !== cy)
+                popup.margins.top = cy
+            return
+        }
+
         const rect = win.itemRect(popup.anchorItem)
         // Centred on the anchor item horizontally; vertical offset is just
         // `popupGap` from the screen's top edge (top-anchored layer surface).

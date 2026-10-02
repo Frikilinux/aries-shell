@@ -1,0 +1,5 @@
+module modules.launcher
+singleton LauncherService 1.0 LauncherService.qml
+singleton LauncherIpc 1.0 LauncherIpc.qml
+Launcher 1.0 Launcher.qml
+LauncherPopup 1.0 LauncherPopup.qml

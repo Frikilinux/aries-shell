@@ -26,6 +26,7 @@ import "modules/weather"
 import "modules/offpeak"
 import "modules/notifications"
 import "modules/wallpaper"
+import "modules/launcher"
 
 ShellRoot {
     // The bar (one per screen). Built once the user config has been read so
@@ -39,6 +40,10 @@ ShellRoot {
                 Bar {
                     // Modules are added to the left / center / right zones.
                     left: [
+                        Launcher {
+                            output: modelData.name
+                            outputs: Config.outputs(Config.revision, "launcher", modelData.name)
+                        },
                         Workspaces {
                             output: modelData.name
                             outputs: Config.outputs(Config.revision, "workspaces", modelData.name)

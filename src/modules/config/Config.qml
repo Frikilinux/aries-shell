@@ -132,6 +132,8 @@ Singleton {
                             units: "metric" },
             power:        { outputs: ["primary"] },
             offpeak:      { outputs: ["primary"] },
+            launcher:     { outputs: ["primary"],
+                            terminal: Quickshell.env("TERMINAL") || "" },
             wallpaper:    { outputs: "*",
                             path: "",
                             fillMode: "crop",

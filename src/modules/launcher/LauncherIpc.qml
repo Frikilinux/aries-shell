@@ -16,22 +16,39 @@ import "../niri"
 // One handler per shell: an IpcHandler inside every bar instance would collide
 // on the same target, so each LauncherPopup registers itself here instead.
 //
-// The launcher popups are independent per-screen overlays (created in
-// shell.qml), so `show()` opens the one on the currently focused output
-// (derived from niri) instead of every monitor or the primary one.
+// The popups are built lazily (Loader.active in shell.qml gated on `enabled`):
+// nothing exists until the launcher is first opened, then the surfaces stay.
+// `show()`/`toggle()` open the popup on the currently focused output (derived
+// from niri); `toggleOutput(name)` is used by a bar icon for its own output.
 Singleton {
     id: root
 
     // Registered launcher popups (one per screen); set by LauncherPopup.
     property var popups: []
 
+    // Loaders in shell.qml create the popups; flipped on first use and kept on.
+    property bool enabled: false
+
+    // A request arrived before the popups were built; resolved once they
+    // register (the timer is restarted on each registration).
+    property bool pending: false
+    property string pendingOutput: ""
+
     function registerPopup(win) {
         if (win && root.popups.indexOf(win) === -1)
             root.popups = root.popups.concat([win])
+        if (root.pending || root.pendingOutput !== "")
+            openTimer.restart()
     }
 
     function unregisterPopup(win) {
         root.popups = root.popups.filter(w => w !== win)
+    }
+
+    // Build the popups if they don't exist yet.
+    function ensure() {
+        if (!root.enabled)
+            root.enabled = true
     }
 
     // Popups with a screen assigned (all registered ones, in practice).
@@ -67,6 +84,12 @@ Singleton {
     }
 
     function show() {
+        root.ensure()
+        if (root.targets().length === 0) {
+            root.pending = true
+            openTimer.restart()
+            return
+        }
         root.openTarget(root.focusedTarget())
     }
 
@@ -84,13 +107,37 @@ Singleton {
 
     // Toggle the popup on a specific output (bar icon click).
     function toggleOutput(name) {
+        root.ensure()
         const target = root.targetForOutput(name)
-        if (target === null)
+        if (target === null) {
+            root.pendingOutput = name
+            openTimer.restart()
             return
+        }
         if (target.visible)
             target.visible = false
         else
             root.openTarget(target)
+    }
+
+    // Resolves a request that arrived before the popups were built. Restarted
+    // by each registerPopup so it fires only after the last one registers.
+    Timer {
+        id: openTimer
+        interval: 30
+        onTriggered: {
+            if (root.pending) {
+                root.pending = false
+                root.openTarget(root.focusedTarget())
+            }
+            if (root.pendingOutput !== "") {
+                const name = root.pendingOutput
+                root.pendingOutput = ""
+                const t = root.targetForOutput(name)
+                if (t !== null)
+                    root.openTarget(t)
+            }
+        }
     }
 
     IpcHandler {

@@ -158,6 +158,32 @@ Singleton {
         return t ? (t.secs || 0) + (t.nanos || 0) / 1e9 : 0
     }
 
+    // Return `w` unchanged when it already has every value in `fields`, else a
+    // shallow copy with them applied. Keeps object identity for unchanged
+    // workspaces so per-workspace bindings don't re-evaluate.
+    function withFields(w, fields) {
+        for (const k in fields) {
+            if (w[k] !== fields[k])
+                return Object.assign({}, w, fields)
+        }
+        return w
+    }
+
+    // Rebuild the workspaces array with `patch`, but only assign (and notify
+    // every bound widget) when at least one workspace actually changed. niri
+    // emits many repeat/no-op Workspace* events; this drops the churn for them.
+    function patchWorkspaces(patch) {
+        let changed = false
+        const next = root.workspaces.map(w => {
+            const n = patch(w)
+            if (n !== w)
+                changed = true
+            return n
+        })
+        if (changed)
+            root.workspaces = next
+    }
+
     // Quit niri (ends the compositor session)
     function quit() {
         send({ Action: { Quit: {} } })
@@ -184,8 +210,8 @@ Singleton {
                 break
             }
         }
-        root.workspaces = root.workspaces.map(w => w.id === workspaceId
-            ? Object.assign({}, w, { is_urgent: urgent })
+        root.patchWorkspaces(w => w.id === workspaceId
+            ? root.withFields(w, { is_urgent: urgent })
             : w)
     }
 
@@ -226,20 +252,24 @@ Singleton {
             const target = root.workspaces.find(w => w.id === e.id)
             if (target) {
                 const output = target.output
-                root.workspaces = root.workspaces.map(w => Object.assign({}, w, {
-                    is_active: w.output === output ? w.id === e.id : w.is_active,
-                    is_focused: e.focused ? w.id === e.id : w.is_focused,
-                }))
+                root.patchWorkspaces(w => {
+                    const fields = {}
+                    if (w.output === output)
+                        fields.is_active = (w.id === e.id)
+                    if (e.focused)
+                        fields.is_focused = (w.id === e.id)
+                    return root.withFields(w, fields)
+                })
             }
         } else if (ev.WorkspaceActiveWindowChanged) {
             const e = ev.WorkspaceActiveWindowChanged
-            root.workspaces = root.workspaces.map(w => w.id === e.workspace_id
-                ? Object.assign({}, w, { active_window_id: e.active_window_id })
+            root.patchWorkspaces(w => w.id === e.workspace_id
+                ? root.withFields(w, { active_window_id: e.active_window_id })
                 : w)
         } else if (ev.WorkspaceUrgencyChanged) {
             const e = ev.WorkspaceUrgencyChanged
-            root.workspaces = root.workspaces.map(w => w.id === e.id
-                ? Object.assign({}, w, { is_urgent: e.urgent })
+            root.patchWorkspaces(w => w.id === e.id
+                ? root.withFields(w, { is_urgent: e.urgent })
                 : w)
         } else if (ev.WindowFocusChanged) {
             // Deliberately do NOT dismiss popups on window focus changes.

@@ -138,23 +138,38 @@ ShellRoot {
         }
     }
 
-    // Polkit authentication dialog: one overlay surface per screen, shown while
-    // an administrative action is waiting for a response. The agent itself
-    // lives in the PolkitService singleton (modules/polkit).
+    // Polkit authentication dialog: built lazily, only while a request is
+    // active (so no per-screen surface exists at idle). Reading PolkitService
+    // in `active` also instantiates the agent singleton at startup.
     Variants {
         model: Quickshell.screens
-        Polkit {
-            outputs: Config.outputs(Config.revision, "polkit", modelData.name)
+        Loader {
+            id: polkitLoader
+            required property var modelData
+            active: PolkitService.active
+            sourceComponent: Component {
+                Polkit {
+                    modelData: polkitLoader.modelData
+                    outputs: Config.outputs(Config.revision, "polkit", polkitLoader.modelData.name)
+                }
+            }
         }
     }
 
-    // Launcher popup: one centred overlay per screen, independent of the bar
-    // icon, so a keybind opens it on the focused output (not on every monitor
-    // or only the primary one). The bar icon toggles its own output's popup.
+    // Launcher popup: built lazily on first use (LauncherIpc.enabled), then kept
+    // so the surfaces persist. One centred overlay per screen, independent of
+    // the bar icon, so a keybind opens it on the focused output.
     Variants {
         model: Quickshell.screens
-        LauncherPopup {
-            // screen is bound to modelData inside LauncherPopup.
+        Loader {
+            id: launcherLoader
+            required property var modelData
+            active: LauncherIpc.enabled
+            sourceComponent: Component {
+                LauncherPopup {
+                    modelData: launcherLoader.modelData
+                }
+            }
         }
     }
 }

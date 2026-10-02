@@ -2,7 +2,10 @@ import QtQuick
 import "../theme"
 import "../icon"
 
-// Bar indicator: a grid icon that opens the application launcher popup.
+// Bar indicator: a grid icon that toggles the application launcher popup.
+// The popup itself is an independent per-screen overlay (created in shell.qml)
+// so it can open on whichever output is focused; the icon only controls its own
+// output.
 Item {
     id: launcher
 
@@ -12,9 +15,6 @@ Item {
     // The output being rendered.
     property string output: ""
 
-    // The popup window, exposed so shell.qml can configure it (e.g. popup.iconStyle)
-    property alias popup: popupWindow
-
     implicitWidth: indicator.implicitWidth
     implicitHeight: indicator.implicitHeight
 
@@ -23,7 +23,7 @@ Item {
 
     Icon {
         id: indicator
-        glyph: popupWindow.launcherGlyph // apps
+        glyph: LauncherService.glyph // apps
         color: Theme.fgBarColor
         font.pixelSize: Theme.iconSize
     }
@@ -31,11 +31,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: popup.visible = !popup.visible
-    }
-
-    LauncherPopup {
-        id: popupWindow
-        anchorItem: launcher
+        // Toggle the launcher popup that belongs to this bar's output.
+        onClicked: LauncherIpc.toggleOutput(launcher.output)
     }
 }

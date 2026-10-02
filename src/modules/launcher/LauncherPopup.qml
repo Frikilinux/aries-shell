@@ -10,10 +10,15 @@ import "../popup"
 BarPopup {
     id: popup
 
+    // Screen this popup belongs to (provided by the `Variants` delegate in
+    // shell.qml). Overriding `screen` makes this an anchorless overlay.
+    required property var modelData
+    screen: modelData
+
     popupWidth: 460
     maxContentHeight: 520
 
-    // The launcher opens centred on the screen, not under the bar icon.
+    // The launcher opens centred on the screen, not under a bar icon.
     centered: true
 
     readonly property var results: LauncherService.results
@@ -22,9 +27,6 @@ BarPopup {
     property int selected: 0
     readonly property int rowHeight: 42
     readonly property int listMaxHeight: 360
-
-    // Icon shown in the search box / bar (apps).
-    readonly property string launcherGlyph: "\ue082"
 
     function popupOpened() {
         LauncherService.query = ""
@@ -77,7 +79,7 @@ BarPopup {
             anchors.left: parent.left
             anchors.leftMargin: 8
             anchors.verticalCenter: parent.verticalCenter
-            glyph: popup.launcherGlyph
+            glyph: LauncherService.glyph
             color: Theme.fgColorMuted
             font.pixelSize: Theme.fontSize - 2
         }

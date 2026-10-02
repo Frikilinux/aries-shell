@@ -33,6 +33,9 @@ Singleton {
     // Live search string typed in the popup.
     property string query: ""
 
+    // Grid/apps glyph shared by the bar icon and the popup search box.
+    readonly property string glyph: "\ue082"
+
     // Ranked matches for `query`: [{ entry, name, subtitle, nameHits, subHits,
     // score, uses }], best first. An empty query lists every app by usage
     // (most used first, then alphabetical).

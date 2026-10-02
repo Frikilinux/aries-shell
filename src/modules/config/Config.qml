@@ -134,6 +134,7 @@ Singleton {
             offpeak:      { outputs: ["primary"] },
             launcher:     { outputs: ["primary"],
                             terminal: Quickshell.env("TERMINAL") || "" },
+            polkit:       { outputs: "*", x: "center", y: "center" },
             wallpaper:    { outputs: "*",
                             path: "",
                             fillMode: "crop",

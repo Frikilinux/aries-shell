@@ -27,6 +27,8 @@ import "modules/offpeak"
 import "modules/notifications"
 import "modules/wallpaper"
 import "modules/launcher"
+import "modules/popup"
+import "modules/polkit"
 
 ShellRoot {
     // The bar (one per screen). Built once the user config has been read so
@@ -135,6 +137,26 @@ ShellRoot {
         model: Quickshell.screens
         NotificationToast {
             outputs: Config.outputs(Config.revision, "notifications", modelData.name)
+        }
+    }
+
+    // Polkit authentication dialog: one overlay surface per screen, shown while
+    // an administrative action is waiting for a response. The agent itself
+    // lives in the PolkitService singleton (modules/polkit).
+    Variants {
+        model: Quickshell.screens
+        Polkit {
+            outputs: Config.outputs(Config.revision, "polkit", modelData.name)
+        }
+    }
+
+    // Launcher popup: one centred overlay per screen, independent of the bar
+    // icon, so a keybind opens it on the focused output (not on every monitor
+    // or only the primary one). The bar icon toggles its own output's popup.
+    Variants {
+        model: Quickshell.screens
+        LauncherPopup {
+            // screen is bound to modelData inside LauncherPopup.
         }
     }
 

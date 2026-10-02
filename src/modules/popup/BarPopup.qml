@@ -16,8 +16,10 @@ import "../theme"
 PanelWindow {
     id: popup
 
-    // Bar item the popup is anchored to
-    required property Item anchorItem
+    // Bar item the popup is anchored to. Optional: a `centered` popup can be a
+    // standalone per-screen overlay by overriding `screen` instead (used by the
+    // launcher, which must open on the focused output wherever that is).
+    property Item anchorItem: null
 
     // Separation between the popup and the bar / the screen edge
     property int popupGap: 3
@@ -105,11 +107,8 @@ PanelWindow {
     }
 
     function refreshItemPos() {
-        const win = popup.barWindow
-        if (win === null)
-            return
-
-        // Screen-centred popup (launcher): ignore the anchor item entirely.
+        // Screen-centred popup (launcher): ignore the anchor item entirely, so
+        // it also works as an anchorless per-screen overlay (screen override).
         if (popup.centered && popup.screen) {
             const cx = Math.max(0, Math.round((popup.screen.width - popup.implicitWidth) / 2))
             if (popup.margins.left !== cx)
@@ -119,6 +118,10 @@ PanelWindow {
                 popup.margins.top = cy
             return
         }
+
+        const win = popup.barWindow
+        if (win === null)
+            return
 
         const rect = win.itemRect(popup.anchorItem)
         // Centred on the anchor item horizontally; vertical offset is just

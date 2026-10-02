@@ -16,6 +16,15 @@ Singleton {
     // urgency when a window changes its urgency (WindowUrgencyChanged).
     property var windowIndex: ({})
 
+    // Output (monitor) currently holding the focused workspace, derived from
+    // the single workspace with `is_focused`. Empty when unknown (no session).
+    // niri has no dedicated "focused output" event; WorkspaceActivated with
+    // `focused: true` marks the newly focused workspace, which is enough.
+    readonly property string focusedOutput: {
+        const w = root.workspaces.find(ws => ws.is_focused)
+        return w && w.output ? w.output : ""
+    }
+
     // Whether a niri session is available (IPC socket is set)
     readonly property bool available: Quickshell.env("NIRI_SOCKET") !== ""
 

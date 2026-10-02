@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import "../theme"
 import "../niri"
@@ -47,6 +49,7 @@ Item {
             model: workspaces.items
 
             delegate: Rectangle {
+                id: wsDot
                 required property var modelData
 
                 readonly property bool current: modelData.is_active
@@ -70,7 +73,7 @@ Item {
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: Niri.focusWorkspace(modelData.id)
+                    onClicked: Niri.focusWorkspace(wsDot.modelData.id)
                 }
             }
         }

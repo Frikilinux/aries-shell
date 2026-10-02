@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import Quickshell.Wayland
 import "../theme"
@@ -71,7 +73,7 @@ Item {
             Component.onCompleted: root.updateFocused()
 
             Connections {
-                target: toplevel
+                target: del.toplevel
                 function onActivatedChanged() { root.updateFocused() }
                 function onScreensChanged() { root.updateFocused() }
                 function onClosed() { root.clearFocused(del) }

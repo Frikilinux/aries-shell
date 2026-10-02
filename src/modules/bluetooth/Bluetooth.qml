@@ -22,16 +22,16 @@ Item {
 
     Icon {
         id: indicator
-        glyph: popup.stateGlyph
+        glyph: bluetooth.popup.stateGlyph
         color: Theme.fgBarColor
-        opacity: popup.adapterEnabled ? (popup.connectedCount > 0 ? 1 : 0.6) : 0.35
+        opacity: bluetooth.popup.adapterEnabled ? (bluetooth.popup.connectedCount > 0 ? 1 : 0.6) : 0.35
         font.pixelSize: Math.round(Theme.iconSize * 1)
     }
 
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: popup.visible = !popup.visible
+        onClicked: bluetooth.popup.visible = !bluetooth.popup.visible
     }
 
     BluetoothPopup {

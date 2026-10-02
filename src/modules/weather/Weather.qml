@@ -48,7 +48,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: popup.visible = !popup.visible
+        onClicked: weather.popup.visible = !weather.popup.visible
     }
 
     WeatherPopup {

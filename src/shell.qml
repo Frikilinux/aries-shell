@@ -8,6 +8,8 @@
 // Mutes playerctld NoActivePlayer noise + tray apps that register an SNI
 // item and leave the bus ("Ignoring invalid StatusNotifierItem registration").
 
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import Quickshell
 import "modules/bar"
@@ -39,68 +41,69 @@ ShellRoot {
             Variants {
                 model: Quickshell.screens
                 Bar {
+                    id: barRoot
                     // Modules are added to the left / center / right zones.
                     left: [
                         Launcher {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "launcher", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "launcher", barRoot.modelData.name)
                         },
                         Workspaces {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "workspaces", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "workspaces", barRoot.modelData.name)
                         },
                         ActiveWindow {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "activeWindow", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "activeWindow", barRoot.modelData.name)
                         }
                     ]
 
                     // MPRIS media player (track info while playing, music icon when idle)
                     center: Mpris {
-                        output: modelData.name
-                        outputs: Config.outputs(Config.revision, "mpris", modelData.name)
+                        output: barRoot.modelData.name
+                        outputs: Config.outputs(Config.revision, "mpris", barRoot.modelData.name)
                     }
 
                     right: [
                         Notifications {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "notifications", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "notifications", barRoot.modelData.name)
                         },
                         Offpeak {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "offpeak", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "offpeak", barRoot.modelData.name)
                         },
                         Systray {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "systray", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "systray", barRoot.modelData.name)
                         },
                         Bluetooth {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "bluetooth", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "bluetooth", barRoot.modelData.name)
                         },
                         Network {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "network", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "network", barRoot.modelData.name)
                         },
                         Volume {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "volume", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "volume", barRoot.modelData.name)
                         },
                         Battery {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "battery", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "battery", barRoot.modelData.name)
                         },
                         Clock {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "clock", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "clock", barRoot.modelData.name)
                         },
                         Weather {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "weather", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "weather", barRoot.modelData.name)
                         },
                         Power {
-                            output: modelData.name
-                            outputs: Config.outputs(Config.revision, "power", modelData.name)
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "power", barRoot.modelData.name)
                         }
                     ]
                 }
@@ -116,7 +119,8 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         Wallpaper {
-            outputs: Config.outputs(Config.revision, "wallpaper", modelData.name)
+            id: wallpaperRoot
+            outputs: Config.outputs(Config.revision, "wallpaper", wallpaperRoot.modelData.name)
         }
     }
 
@@ -125,7 +129,8 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         VolumeOsd {
-            outputs: Config.outputs(Config.revision, "volume", modelData.name)
+            id: volumeOsdRoot
+            outputs: Config.outputs(Config.revision, "volume", volumeOsdRoot.modelData.name)
         }
     }
 
@@ -134,7 +139,8 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         NotificationToast {
-            outputs: Config.outputs(Config.revision, "notifications", modelData.name)
+            id: toastRoot
+            outputs: Config.outputs(Config.revision, "notifications", toastRoot.modelData.name)
         }
     }
 

@@ -19,6 +19,9 @@ Item {
     property string name: ""
     // Displayed size of the icon in px
     property int iconSize: Theme.iconSize
+    // Recolor theme (monochrome) icons to the bar foreground. Costs a per-icon
+    // offscreen layer + shader; disable to render them in their own color.
+    property bool recolor: true
 
     // Theme-provided icons (`image://icon/`) are recolored to the bar
     // foreground; app-provided pixmaps/documents are left untouched.
@@ -44,8 +47,9 @@ Item {
         source: root.name
 
         // Paint monochrome theme icons with the bar foreground. Only enabled
-        // for themed icons, so app-supplied pixmaps keep their own colors.
-        layer.enabled: root.themed
+        // for themed icons (and when `recolor` is on), so app-supplied pixmaps
+        // keep their own colors and the layer cost can be opted out.
+        layer.enabled: root.themed && root.recolor
         layer.effect: MultiEffect {
             colorization: 1.0
             colorizationColor: Theme.fgBarColor

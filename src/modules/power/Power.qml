@@ -30,7 +30,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: popup.visible = !popup.visible
+        onClicked: power.popup.visible = !power.popup.visible
     }
 
     PowerPopup {

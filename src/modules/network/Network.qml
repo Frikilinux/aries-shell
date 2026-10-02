@@ -125,7 +125,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: popup.visible = !popup.visible
+        onClicked: network.popup.visible = !network.popup.visible
     }
 
     NetworkPopup {

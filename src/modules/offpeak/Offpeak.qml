@@ -36,7 +36,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: popup.visible = !popup.visible
+        onClicked: offPeak.popup.visible = !offPeak.popup.visible
     }
 
     OffpeakPopup {

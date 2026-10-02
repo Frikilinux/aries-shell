@@ -32,21 +32,36 @@ Singleton {
         return 2 + external
     }
 
-    readonly property var ordered: {
-        const list = root.devices.filter(
-            x => x.type === DeviceType.Wifi || x.type === DeviceType.Wired)
-        list.sort((a, b) => {
+    // Ranked device lists for the bar and popup, computed in one pass so the
+    // three views share a single filter + sort instead of re-filtering.
+    readonly property var rankedDevices: {
+        const ordered = []
+        for (let i = 0; i < root.devices.length; i++) {
+            const d = root.devices[i]
+            if (d.type === DeviceType.Wifi || d.type === DeviceType.Wired)
+                ordered.push(d)
+        }
+        ordered.sort((a, b) => {
             const ra = root.rank(a)
             const rb = root.rank(b)
             if (ra !== rb)
                 return ra - rb
             return String(a.name).localeCompare(String(b.name))
         })
-        return list
+        const wifi = []
+        const wired = []
+        for (let i = 0; i < ordered.length; i++) {
+            if (ordered[i].type === DeviceType.Wifi)
+                wifi.push(ordered[i])
+            else
+                wired.push(ordered[i])
+        }
+        return { ordered: ordered, wifi: wifi, wired: wired }
     }
 
-    readonly property var wifiDevices: ordered.filter(x => x.type === DeviceType.Wifi)
-    readonly property var wiredDevices: ordered.filter(x => x.type === DeviceType.Wired)
+    readonly property var ordered: root.rankedDevices.ordered
+    readonly property var wifiDevices: root.rankedDevices.wifi
+    readonly property var wiredDevices: root.rankedDevices.wired
 
     // ------------------------------------------------------------------
     // Shared helpers (bar + popup)

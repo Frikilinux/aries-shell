@@ -16,6 +16,8 @@ Item {
     // Displayed icon size in px. Systray sets this from its own `iconSize`;
     // the default keeps the component usable (and sane) standalone.
     property int iconSize: Theme.iconSize
+    // Recolor theme (monochrome) icons to the bar foreground (see TrayIcon).
+    property bool recolor: true
 
     // Extra hover area around the icon (does not affect layout size)
     property int itemPadding: 5
@@ -29,6 +31,7 @@ Item {
         anchors.centerIn: parent
         name: root.item.icon
         iconSize: root.iconSize
+        recolor: root.recolor
     }
 
     // Context menu, dropped below the bar and centered on this icon

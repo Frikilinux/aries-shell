@@ -1,6 +1,9 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import Quickshell.Services.SystemTray
 import "../theme"
+import "../config"
 
 // System tray: shows the registered StatusNotifierItem icons in a row.
 // Icons are resolved against the active icon theme by IconResolver.
@@ -16,6 +19,10 @@ Item {
     property string output: ""
     // Displayed size of each tray icon in px (propagated to TrayItem/TrayIcon).
     property int iconSize: Theme.iconSize
+    // Recolor theme (monochrome) icons to the bar foreground via a per-icon
+    // MultiEffect layer. Turn off to skip the extra FBO + shader per icon (the
+    // icons then keep their own theme color).
+    property bool recolor: Config.settings.modules.systray.recolor
     // Gap between consecutive icons.
     property int spacing: Theme.spacing
 
@@ -36,6 +43,7 @@ Item {
                 required property var modelData
                 item: modelData
                 iconSize: systray.iconSize
+                recolor: systray.recolor
             }
         }
     }

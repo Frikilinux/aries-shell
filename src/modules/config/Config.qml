@@ -110,7 +110,7 @@ Singleton {
             workspaces:   { outputs: ["primary"] },
             activeWindow: { outputs: ["primary"], maxLabelWidth: 200, appNames: {} },
             mpris:        { outputs: ["primary"], maxLabelWidth: 180 },
-            systray:      { outputs: ["primary"] },
+            systray:      { outputs: ["primary"], recolor: true },
             bluetooth:    { outputs: ["primary"], deviceIcons: {} },
             network:      { outputs: ["primary"] },
             volume:       { outputs: ["primary"], scrollStep: 0.03, naturalScroll: true,

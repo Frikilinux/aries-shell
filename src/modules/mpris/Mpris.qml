@@ -39,12 +39,12 @@ Item {
     // Module is visible only if outputs property is unset, matches this output, or contains it
     visible: !outputs || (Array.isArray(outputs) ? outputs.includes(output) : outputs === output)
 
-    // Idle: Arch logo when there is no active player
+    // Idle: Aries logo when there is no active player
     Icon {
         id: idleIcon
         visible: !mpris.hasPlayer
         anchors.centerIn: parent
-        glyph: "\ue074" // mdi-arch
+        glyph: "\ue083" // aries-ram
         color: Theme.fgBarColor
         opacity: 0.5
     }

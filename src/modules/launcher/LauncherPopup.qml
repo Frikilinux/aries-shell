@@ -135,12 +135,12 @@ BarPopup {
         }
     }
 
-    // Separator.
-    Rectangle {
-        width: popup.contentWidth
-        height: 1
-        color: Theme.popupBorderColor
-    }
+    // // Separator.
+    // Rectangle {
+    //     width: popup.contentWidth
+    //     height: 1
+    //     color: Theme.popupBorderColor
+    // }
 
     // Ranked results.
     ListView {
@@ -172,9 +172,9 @@ BarPopup {
                 anchors.fill: parent
                 radius: 6
                 color: row.isSelected
-                    ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.22)
+                    ? Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.12)
                     : (rowMouse.containsMouse
-                        ? Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.08)
+                        ? Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.05)
                         : "transparent")
             }
 

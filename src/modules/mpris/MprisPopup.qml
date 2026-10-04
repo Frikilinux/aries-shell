@@ -14,6 +14,11 @@ BarPopup {
     property int artSize: 180
     readonly property int artGap: 18
 
+    // Height is driven by the art panel: the square cover spans the whole
+    // window, the info column rides inside the content padding. Only text
+    // taller than the cover (very long titles) grows the window.
+    implicitHeight: Math.min(Math.max(popup.artSize, textCol.implicitHeight + popup.contentPadding * 2), popup.maxContentHeight)
+
     // Best player: prefer playing, then paused, then any available. playerctld
     // is filtered out (it errors with NoActivePlayer when nothing is controlled).
     readonly property var player: {
@@ -55,47 +60,100 @@ BarPopup {
         return path !== "" ? path : entry.icon
     }
 
-    // Blurred, darkened album art spanning the whole popup window (painted
-    // above the base background, below the content column).
-    background: ClippingRectangle {
-        visible: popup.hasArt
-        anchors.fill: parent
-        radius: Theme.popupRadius
-        // Fallback fill while the art is still loading (or if it fails).
-        color: Theme.bgColor
-        opacity: Theme.bgOpacity
+    // Layers painted above the base background and below the content column:
+    // the blurred album backdrop across the whole window, then the sharp art
+    // panel flush against the popup's left border.
+    background: [
+        ClippingRectangle {
+            visible: popup.hasArt
+            anchors.fill: parent
+            radius: Theme.popupRadius
+            // Fallback fill while the art is still loading (or if it fails).
+            color: Theme.bgColor
+            opacity: Theme.bgOpacity
 
-        // Oversized by 60px so the blur's transparent edge bleed (half of
-        // blurMax) stays outside the rounded clip.
-        Image {
-            id: bgArt
-            x: -30
-            y: -30
-            width: parent.width + 60
-            height: parent.height + 60
-            source: popup.hasArt ? popup.player.trackArtUrl : ""
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: true
-            // Decode at popup size, not the art's natural resolution: the
-            // backdrop is blurred, so full-size pixels would be wasted RAM.
-            sourceSize.width: popup.popupWidth * Screen.devicePixelRatio
-            sourceSize.height: popup.popupWidth * Screen.devicePixelRatio
-            // Render into a layer so MultiEffect consumes the item itself
-            // (no double paint) instead of being stacked over a sharp image.
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                blurEnabled: true
-                blur: 1.0
-                blurMax: 40
+            // Oversized by 60px so the blur's transparent edge bleed (half of
+            // blurMax) stays outside the rounded clip.
+            Image {
+                id: bgArt
+                x: -30
+                y: -30
+                width: parent.width + 60
+                height: parent.height + 60
+                source: popup.hasArt ? popup.player.trackArtUrl : ""
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                // Decode at popup size, not the art's natural resolution: the
+                // backdrop is blurred, so full-size pixels would be wasted RAM.
+                sourceSize.width: popup.popupWidth * Screen.devicePixelRatio
+                sourceSize.height: popup.popupWidth * Screen.devicePixelRatio
+                // Render into a layer so MultiEffect consumes the item itself
+                // (no double paint) instead of being stacked over a sharp image.
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: 40
+                }
+            }
+
+            // Dark tint: keeps the light theme text readable over pale artwork.
+            Rectangle {
+                anchors.fill: parent
+                color: "#66000000"
+            }
+        },
+
+        // Sharp album art: square (artSize x artSize) and flush with the
+        // popup's left/top borders (zero padding -> left corners follow the
+        // window radius), cut straight on the right where the info column
+        // starts. The window is exactly as tall as this panel.
+        ClippingRectangle {
+            id: card
+            visible: popup.hasPlayer
+            anchors.left: parent.left
+            anchors.top: parent.top
+            width: popup.artSize
+            height: popup.artSize
+            // Nested radius: zero padding from the window edge -> the left
+            // corners follow the window radius; the right side stays straight.
+            radius: Theme.popupRadius
+            topRightRadius: 0
+            bottomRightRadius: 0
+            // ClippingRectangle paints white by default; keep it transparent so
+            // the no-art placeholder shows the popup background through it.
+            color: "transparent"
+
+            // Album art (sharp copy; decode capped at display size * dpr)
+            Image {
+                visible: popup.hasArt
+                anchors.fill: parent
+                source: popup.hasArt ? popup.player.trackArtUrl : ""
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                sourceSize.width: popup.artSize * Screen.devicePixelRatio
+                sourceSize.height: popup.artSize * Screen.devicePixelRatio
+                cache: true
+            }
+
+            // Placeholder when no art
+            Rectangle {
+                visible: !popup.hasArt
+                anchors.fill: parent
+                color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.08)
+                border.width: 1
+                border.color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.15)
+
+                Icon {
+                    anchors.centerIn: parent
+                    glyph: "\ue06c" // headphones-sound-wave (no album art)
+                    font.pixelSize: 36
+                    color: Theme.fgColor
+                    opacity: 0.4
+                }
             }
         }
-
-        // Dark tint: keeps the light theme text readable over pale artwork.
-        Rectangle {
-            anchors.fill: parent
-            color: "#66000000"
-        }
-    }
+    ]
 
     // Corner badge + border over the content (border only while the backdrop
     // hides the base one).
@@ -134,63 +192,20 @@ BarPopup {
         font.pixelSize: Theme.fontSize
     }
 
-    // Track info + controls: sharp album card on the left, info column on the
-    // right; both bottom-aligned (block flush at the bottom of the popup).
+    // Track info + controls: info column to the right of the sharp art panel
+    // (backdrop layer, square + flush at the popup's left border), filling the
+    // window's inner height so it stays bottom-aligned on the content padding.
     Item {
         id: infoRow
         visible: popup.hasPlayer
         width: popup.contentWidth
-        height: Math.max(card.height, textCol.implicitHeight)
-        readonly property int imageRadius: Theme.popupRadius - popup.contentPadding
-
-        ClippingRectangle {
-            id: card
-            anchors.bottom: parent.bottom
-            width: popup.artSize
-            height: popup.artSize
-            // Nested radius: parent (window) radius - padding from it,
-            // 13 - 12 = 1 -> concentric with the window corner.
-            // radius: Theme.popupRadius - popup.contentPadding
-            radius: infoRow.imageRadius >= 6 ? infoRow.imageRadius : 6
-            // ClippingRectangle paints white by default; keep it transparent so
-            // the no-art placeholder shows the popup background through it.
-            color: "transparent"
-
-            // Album art (sharp copy; decode capped at display size * dpr)
-            Image {
-                visible: popup.hasArt
-                anchors.fill: parent
-                source: popup.hasArt ? popup.player.trackArtUrl : ""
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                sourceSize.width: popup.artSize * Screen.devicePixelRatio
-                sourceSize.height: popup.artSize * Screen.devicePixelRatio
-                cache: true
-            }
-
-            // Placeholder when no art
-            Rectangle {
-                visible: !popup.hasArt
-                anchors.fill: parent
-                color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.08)
-                border.width: 1
-                border.color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.15)
-
-                Icon {
-                    anchors.centerIn: parent
-                    glyph: "\ue06c" // headphones-sound-wave (no album art)
-                    font.pixelSize: 36
-                    color: Theme.fgColor
-                    opacity: 0.4
-                }
-            }
-        }
+        height: popup.implicitHeight - popup.contentPadding * 2
 
         Column {
             id: textCol
             anchors.bottom: parent.bottom
-            x: popup.artSize + popup.artGap
-            width: parent.width - popup.artSize - popup.artGap
+            x: popup.artSize + popup.artGap - popup.contentPadding
+            width: parent.width - popup.artSize - popup.artGap + popup.contentPadding
             spacing: 3
 
             Text {

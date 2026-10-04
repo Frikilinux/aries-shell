@@ -36,6 +36,10 @@ PanelWindow {
     property color winColor: Theme.bgColor
     property real winOpacity: Theme.bgOpacity
 
+    // Space between the window edge and the content column (both axes). Nested
+    // children derive their radius from it: inner = parent radius - padding.
+    property int contentPadding: 12
+
     // Instances add their content here (laid out in the scrollable column)
     default property alias content: column.data
 
@@ -84,7 +88,7 @@ PanelWindow {
     visible: false
     color: "transparent"
     implicitWidth: popupWidth
-    implicitHeight: Math.min(column.implicitHeight + 24, maxContentHeight)
+    implicitHeight: Math.min(column.implicitHeight + popup.contentPadding * 2, maxContentHeight)
 
     // Override in instances to run extra logic when shown / hidden.
     function popupOpened() {}
@@ -167,7 +171,7 @@ PanelWindow {
     Flickable {
         id: flick
         anchors.fill: parent
-        anchors.margins: 12
+        anchors.margins: popup.contentPadding
         contentWidth: width
         contentHeight: column.implicitHeight
         clip: true

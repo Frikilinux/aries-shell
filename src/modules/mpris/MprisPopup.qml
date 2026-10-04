@@ -10,9 +10,9 @@ import "../popup"
 BarPopup {
     id: popup
 
-    popupWidth: 400
+    popupWidth: 475
     property int artSize: 180
-    readonly property int artGap: 14
+    readonly property int artGap: 18
 
     // Best player: prefer playing, then paused, then any available. playerctld
     // is filtered out (it errors with NoActivePlayer when nothing is controlled).
@@ -141,13 +141,17 @@ BarPopup {
         visible: popup.hasPlayer
         width: popup.contentWidth
         height: Math.max(card.height, textCol.implicitHeight)
+        readonly property int imageRadius: Theme.popupRadius - popup.contentPadding
 
         ClippingRectangle {
             id: card
             anchors.bottom: parent.bottom
             width: popup.artSize
             height: popup.artSize
-            radius: Theme.popupRadius
+            // Nested radius: parent (window) radius - padding from it,
+            // 13 - 12 = 1 -> concentric with the window corner.
+            // radius: Theme.popupRadius - popup.contentPadding
+            radius: infoRow.imageRadius >= 6 ? infoRow.imageRadius : 6
             // ClippingRectangle paints white by default; keep it transparent so
             // the no-art placeholder shows the popup background through it.
             color: "transparent"

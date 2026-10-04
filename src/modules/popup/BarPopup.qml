@@ -39,6 +39,15 @@ PanelWindow {
     // Instances add their content here (laid out in the scrollable column)
     default property alias content: column.data
 
+    // Optional backdrop layer: painted above the base background and below the
+    // content column, spanning the whole window (e.g. the mpris popup's blurred
+    // album art). Empty by default, so other popups are unaffected.
+    property alias background: bgLayer.data
+
+    // Optional overlay layer: painted above the content (e.g. corner badges
+    // like the mpris app icon). Empty by default.
+    property alias overlay: overlayLayer.data
+
     // Width available to the content column
     readonly property real contentWidth: column.width
 
@@ -148,6 +157,13 @@ PanelWindow {
         border.color: Theme.popupBorderColor
     }
 
+    // Backdrop slot (above the base background, below the content column),
+    // spanning the whole window regardless of the content padding.
+    Item {
+        id: bgLayer
+        anchors.fill: parent
+    }
+
     Flickable {
         id: flick
         anchors.fill: parent
@@ -162,5 +178,12 @@ PanelWindow {
             width: flick.width
             spacing: 6
         }
+    }
+
+    // Overlay slot (above the content): corner badges, borders redrawn over a
+    // backdrop, etc.
+    Item {
+        id: overlayLayer
+        anchors.fill: parent
     }
 }

@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Effects
+import Quickshell
 import Quickshell.Services.Mpris
 import Quickshell.Widgets
 import "../theme"
@@ -8,7 +10,9 @@ import "../popup"
 BarPopup {
     id: popup
 
-    property int artSize: 180
+    popupWidth: 380
+    property int artSize: 150
+    readonly property int artGap: 14
 
     // Best player: prefer playing, then paused, then any available. playerctld
     // is filtered out (it errors with NoActivePlayer when nothing is controlled).
@@ -25,6 +29,99 @@ BarPopup {
     }
     readonly property bool hasPlayer: player !== null
     readonly property bool isPlaying: hasPlayer && player.isPlaying
+    readonly property bool hasArt: hasPlayer && player.trackArtUrl !== ""
+
+    // The blurred album backdrop replaces the base fill (winOpacity below), so
+    // the popup keeps exactly the transparency of every other popup
+    // (colors.bgOpacity). The base Rectangle keeps drawing its border when
+    // there is no art; with art the border is redrawn in the overlay layer
+    // (above the backdrop), otherwise it would be buried under it.
+    winOpacity: popup.hasArt ? 0 : Theme.bgOpacity
+
+    // App badge for the top-right corner: the player's .desktop entry icon
+    // (replaces the old identity name footer). "" = hidden (no entry/icon).
+    // The `entries` read is deliberate: heuristicLookup has no change
+    // notification and DesktopEntries scans asynchronously *after* the config
+    // loads, so reading the list first makes the lookup re-run when the scan
+    // lands (a lookup-only binding would cache null forever).
+    readonly property string appIcon: {
+        const entries = DesktopEntries.applications.values
+        if (!popup.hasPlayer || popup.player.desktopEntry === "" || entries.length === 0)
+            return ""
+        const entry = DesktopEntries.heuristicLookup(popup.player.desktopEntry)
+        if (!entry || entry.icon === "")
+            return ""
+        const path = Quickshell.iconPath(entry.icon, true)
+        return path !== "" ? path : entry.icon
+    }
+
+    // Blurred, darkened album art spanning the whole popup window (painted
+    // above the base background, below the content column).
+    background: ClippingRectangle {
+        visible: popup.hasArt
+        anchors.fill: parent
+        radius: Theme.popupRadius
+        // Fallback fill while the art is still loading (or if it fails).
+        color: Theme.bgColor
+        opacity: Theme.bgOpacity
+
+        // Oversized by 60px so the blur's transparent edge bleed (half of
+        // blurMax) stays outside the rounded clip.
+        Image {
+            id: bgArt
+            x: -30
+            y: -30
+            width: parent.width + 60
+            height: parent.height + 60
+            source: popup.hasArt ? popup.player.trackArtUrl : ""
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            // Decode at popup size, not the art's natural resolution: the
+            // backdrop is blurred, so full-size pixels would be wasted RAM.
+            sourceSize.width: popup.popupWidth * Screen.devicePixelRatio
+            sourceSize.height: popup.popupWidth * Screen.devicePixelRatio
+            // Render into a layer so MultiEffect consumes the item itself
+            // (no double paint) instead of being stacked over a sharp image.
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blur: 1.0
+                blurMax: 40
+            }
+        }
+
+        // Dark tint: keeps the light theme text readable over pale artwork.
+        Rectangle {
+            anchors.fill: parent
+            color: "#66000000"
+        }
+    }
+
+    // Corner badge + border over the content (border only while the backdrop
+    // hides the base one).
+    overlay: [
+        Rectangle {
+            visible: popup.hasArt
+            anchors.fill: parent
+            radius: Theme.popupRadius
+            color: "transparent"
+            border.width: Theme.popupBorderWidth
+            border.color: Theme.popupBorderColor
+        },
+        Image {
+            visible: popup.appIcon !== ""
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 14
+            width: 22
+            height: 22
+            source: popup.appIcon
+            fillMode: Image.PreserveAspectFit
+            asynchronous: true
+            sourceSize.width: 48
+            sourceSize.height: 48
+        }
+    ]
 
     // No player available
     Text {
@@ -37,101 +134,109 @@ BarPopup {
         font.pixelSize: Theme.fontSize
     }
 
-    // Album art
-    ClippingRectangle {
-        visible: popup.hasPlayer && popup.player.trackArtUrl !== ""
-        width: popup.artSize
-        height: popup.artSize
-        anchors.horizontalCenter: parent.horizontalCenter
-        radius: 8
-
-        Image {
-            width: parent.width
-            height: parent.height
-            source: popup.hasPlayer ? popup.player.trackArtUrl : ""
-            // Decode at display size (x dpr) instead of the art's natural
-            // resolution: caps decoded RAM per track. Async avoids blocking the
-            // UI thread on the track change.
-            sourceSize.width: popup.artSize * Screen.devicePixelRatio
-            sourceSize.height: popup.artSize * Screen.devicePixelRatio
-            asynchronous: true
-            fillMode: Image.PreserveAspectFit
-            cache: true
-        }
-    }
-
-    // Placeholder when no art
-    Rectangle {
-        visible: popup.hasPlayer && popup.player.trackArtUrl === ""
-        width: popup.artSize
-        height: popup.artSize
-        anchors.horizontalCenter: parent.horizontalCenter
-        radius: 8
-        color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.08)
-        border.width: 1
-        border.color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.15)
-
-        Icon {
-            anchors.centerIn: parent
-            glyph: "\ue06c" // headphones-sound-wave (no album art)
-            font.pixelSize: 36
-            color: Theme.fgColor
-            opacity: 0.4
-        }
-    }
-
-    // Track info
-    Column {
+    // Track info: sharp album card on the left, text block on the right,
+    // sitting on the blurred backdrop (media-card layout).
+    Item {
+        id: infoRow
         visible: popup.hasPlayer
-        width: parent.width
-        spacing: 2
+        width: popup.contentWidth
+        height: Math.max(card.height, textCol.implicitHeight)
 
-        Text {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: popup.player ? popup.player.trackTitle : ""
-            color: Theme.fgColor
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize + 1
-            font.bold: true
-            maximumLineCount: 2
-            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+        ClippingRectangle {
+            id: card
+            anchors.verticalCenter: parent.verticalCenter
+            width: popup.artSize
+            height: popup.artSize
+            radius: Theme.popupRadius
+            // ClippingRectangle paints white by default; keep it transparent so
+            // the no-art placeholder shows the popup background through it.
+            color: "transparent"
+
+            // Album art (sharp copy; decode capped at display size * dpr)
+            Image {
+                visible: popup.hasArt
+                anchors.fill: parent
+                source: popup.hasArt ? popup.player.trackArtUrl : ""
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                sourceSize.width: popup.artSize * Screen.devicePixelRatio
+                sourceSize.height: popup.artSize * Screen.devicePixelRatio
+                cache: true
+            }
+
+            // Placeholder when no art
+            Rectangle {
+                visible: !popup.hasArt
+                anchors.fill: parent
+                color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.08)
+                border.width: 1
+                border.color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.15)
+
+                Icon {
+                    anchors.centerIn: parent
+                    glyph: "\ue06c" // headphones-sound-wave (no album art)
+                    font.pixelSize: 36
+                    color: Theme.fgColor
+                    opacity: 0.4
+                }
+            }
         }
 
-        Text {
-            visible: popup.player && popup.player.trackArtist !== ""
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: popup.player ? popup.player.trackArtist : ""
-            color: Theme.accentColor
-            // color: Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.7)
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize
-            maximumLineCount: 1
-            elide: Text.ElideRight
-        }
+        Column {
+            id: textCol
+            anchors.verticalCenter: parent.verticalCenter
+            x: popup.artSize + popup.artGap
+            width: parent.width - popup.artSize - popup.artGap
+            spacing: 3
 
-        Text {
-            visible: popup.player && popup.player.trackAlbum !== ""
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: popup.player ? popup.player.trackAlbum : ""
-            color: Theme.fgColor
-            opacity: 0.5
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize - 1
-            maximumLineCount: 1
-            elide: Text.ElideRight
+            Text {
+                visible: popup.hasPlayer
+                width: textCol.width
+                text: "NOW PLAYING"
+                color: Theme.fgColor
+                opacity: 0.6
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize - 5
+                font.letterSpacing: 1.5
+            }
+
+            Text {
+                visible: popup.hasPlayer
+                width: textCol.width
+                text: popup.player ? popup.player.trackTitle : ""
+                color: Theme.fgColor
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize + 1
+                font.bold: true
+                maximumLineCount: 2
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                elide: Text.ElideRight
+            }
+
+            Text {
+                visible: popup.player && popup.player.trackArtist !== ""
+                width: textCol.width
+                text: popup.player ? popup.player.trackArtist : ""
+                color: Theme.accentColor
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize
+                maximumLineCount: 1
+                elide: Text.ElideRight
+            }
+
+            Text {
+                visible: popup.player && popup.player.trackAlbum !== ""
+                width: textCol.width
+                text: popup.player ? popup.player.trackAlbum : ""
+                color: Theme.fgColor
+                opacity: 0.5
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize - 1
+                maximumLineCount: 1
+                elide: Text.ElideRight
+            }
         }
     }
-
-    // Separator
-    // Rectangle {
-    //     visible: popup.hasPlayer
-    //     width: parent.width
-    //     height: 1
-    //     color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.15)
-    // }
 
     // Playback controls
     Row {
@@ -225,17 +330,5 @@ BarPopup {
                 }
             }
         }
-    }
-
-    // Player identity footer
-    Text {
-        visible: popup.hasPlayer && popup.player.identity !== ""
-        width: parent.width
-        horizontalAlignment: Text.AlignHCenter
-        text: popup.player ? popup.player.identity : ""
-        color: Theme.fgColor
-        opacity: 0.4
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSize - 2
     }
 }

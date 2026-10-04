@@ -10,8 +10,8 @@ import "../popup"
 BarPopup {
     id: popup
 
-    popupWidth: 380
-    property int artSize: 150
+    popupWidth: 400
+    property int artSize: 180
     readonly property int artGap: 14
 
     // Best player: prefer playing, then paused, then any available. playerctld
@@ -134,8 +134,8 @@ BarPopup {
         font.pixelSize: Theme.fontSize
     }
 
-    // Track info: sharp album card on the left, text block on the right,
-    // sitting on the blurred backdrop (media-card layout).
+    // Track info + controls: sharp album card on the left, info column on the
+    // right; both bottom-aligned (block flush at the bottom of the popup).
     Item {
         id: infoRow
         visible: popup.hasPlayer
@@ -144,7 +144,7 @@ BarPopup {
 
         ClippingRectangle {
             id: card
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.bottom: parent.bottom
             width: popup.artSize
             height: popup.artSize
             radius: Theme.popupRadius
@@ -184,7 +184,7 @@ BarPopup {
 
         Column {
             id: textCol
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.bottom: parent.bottom
             x: popup.artSize + popup.artGap
             width: parent.width - popup.artSize - popup.artGap
             spacing: 3
@@ -235,98 +235,104 @@ BarPopup {
                 maximumLineCount: 1
                 elide: Text.ElideRight
             }
-        }
-    }
 
-    // Playback controls
-    Row {
-        visible: popup.hasPlayer
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: 20
+            // Playback controls share the info column (centred on it,
+            // 10px of extra air above them)
+            Item {
+                width: textCol.width
+                height: controlsRow.height + 10
 
-        // Shuffle
-        Icon {
-            anchors.verticalCenter: parent.verticalCenter
-            enabled: popup.player && popup.player.shuffleSupported
-            glyph: "\ue021" // arrow-shuffle
-            color: popup.player && popup.player.shuffle ? Theme.accentColor : Theme.fgColor
-            opacity: enabled ? (popup.player && popup.player.shuffle ? 1 : 0.5) : 0.35
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    if (popup.player && popup.player.shuffleSupported)
-                        popup.player.shuffle = !popup.player.shuffle
-                }
-            }
-        }
+                Row {
+                    id: controlsRow
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom
+                    spacing: 20
+                    // Shuffle
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        enabled: popup.player && popup.player.shuffleSupported
+                        glyph: "\ue021" // arrow-shuffle
+                        color: popup.player && popup.player.shuffle ? Theme.accentColor : Theme.fgColor
+                        opacity: enabled ? (popup.player && popup.player.shuffle ? 1 : 0.5) : 0.35
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (popup.player && popup.player.shuffleSupported)
+                                    popup.player.shuffle = !popup.player.shuffle
+                            }
+                        }
+                    }
 
-        // Previous (dimmed and inert when there is no track before the current one)
-        Icon {
-            anchors.verticalCenter: parent.verticalCenter
-            glyph: "\ue036" // previous
-            color: Theme.fgColor
-            enabled: popup.player && popup.player.canGoPrevious
-            opacity: enabled ? 1 : 0.35
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: popup.player.previous()
-            }
-        }
+                    // Previous (dimmed and inert when there is no track before the current one)
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        glyph: "\ue036" // previous
+                        color: Theme.fgColor
+                        enabled: popup.player && popup.player.canGoPrevious
+                        opacity: enabled ? 1 : 0.35
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: popup.player.previous()
+                        }
+                    }
 
-        // Play / Pause
-        Icon {
-            anchors.verticalCenter: parent.verticalCenter
-            enabled: popup.player && popup.player.canTogglePlaying
-            glyph: popup.isPlaying ? "\ue032" : "\ue034" // pause : play
-            color: Theme.fgColor
-            font.pixelSize: Theme.iconSize + 6
-            opacity: enabled ? 1 : 0.35
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: popup.player.togglePlaying()
-            }
-        }
+                    // Play / Pause
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        enabled: popup.player && popup.player.canTogglePlaying
+                        glyph: popup.isPlaying ? "\ue032" : "\ue034" // pause : play
+                        color: Theme.fgColor
+                        font.pixelSize: Theme.iconSize + 6
+                        opacity: enabled ? 1 : 0.35
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: popup.player.togglePlaying()
+                        }
+                    }
 
-        // Next
-        Icon {
-            anchors.verticalCenter: parent.verticalCenter
-            enabled: popup.player && popup.player.canGoNext
-            glyph: "\ue031" // next
-            color: Theme.fgColor
-            opacity: enabled ? 1 : 0.35
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: popup.player.next()
-            }
-        }
+                    // Next
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        enabled: popup.player && popup.player.canGoNext
+                        glyph: "\ue031" // next
+                        color: Theme.fgColor
+                        opacity: enabled ? 1 : 0.35
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: popup.player.next()
+                        }
+                    }
 
-        // Loop (none -> playlist -> track -> none)
-        Icon {
-            anchors.verticalCenter: parent.verticalCenter
-            enabled: popup.player && popup.player.loopSupported
-            glyph: popup.player && popup.player.loopState === MprisLoopState.Track
-                ? "\ue01e" // arrow-repeat1 (repeat-1)
-                : "\ue01f" // arrow-repeat-all (repeat)
-            color: popup.player && popup.player.loopState !== MprisLoopState.None
-                ? Theme.accentColor : Theme.fgColor
-            opacity: enabled ? (popup.player && popup.player.loopState !== MprisLoopState.None ? 1 : 0.5) : 0.35
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    if (!popup.player || !popup.player.loopSupported)
-                        return
-                    const s = popup.player.loopState
-                    if (s === MprisLoopState.None)
-                        popup.player.loopState = MprisLoopState.Playlist
-                    else if (s === MprisLoopState.Playlist)
-                        popup.player.loopState = MprisLoopState.Track
-                    else
-                        popup.player.loopState = MprisLoopState.None
+                    // Loop (none -> playlist -> track -> none)
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        enabled: popup.player && popup.player.loopSupported
+                        glyph: popup.player && popup.player.loopState === MprisLoopState.Track
+                            ? "\ue01e" // arrow-repeat1 (repeat-1)
+                            : "\ue01f" // arrow-repeat-all (repeat)
+                        color: popup.player && popup.player.loopState !== MprisLoopState.None
+                            ? Theme.accentColor : Theme.fgColor
+                        opacity: enabled ? (popup.player && popup.player.loopState !== MprisLoopState.None ? 1 : 0.5) : 0.35
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (!popup.player || !popup.player.loopSupported)
+                                    return
+                                const s = popup.player.loopState
+                                if (s === MprisLoopState.None)
+                                    popup.player.loopState = MprisLoopState.Playlist
+                                else if (s === MprisLoopState.Playlist)
+                                    popup.player.loopState = MprisLoopState.Track
+                                else
+                                    popup.player.loopState = MprisLoopState.None
+                            }
+                        }
+                    }
                 }
             }
         }

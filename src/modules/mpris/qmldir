@@ -1,3 +1,4 @@
 module modules.mpris
+singleton FanartService 1.0 FanartService.qml
 Mpris 1.0 Mpris.qml
 MprisPopup 1.0 MprisPopup.qml

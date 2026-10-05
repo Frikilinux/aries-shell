@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Effects
-import Quickshell
 import Quickshell.Services.Mpris
 import Quickshell.Widgets
 import "../theme"
@@ -36,39 +35,46 @@ BarPopup {
     readonly property bool isPlaying: hasPlayer && player.isPlaying
     readonly property bool hasArt: hasPlayer && player.trackArtUrl !== ""
 
-    // The blurred album backdrop replaces the base fill (winOpacity below), so
-    // the popup keeps exactly the transparency of every other popup
-    // (colors.bgOpacity). The base Rectangle keeps drawing its border when
-    // there is no art; with art the border is redrawn in the overlay layer
-    // (above the backdrop), otherwise it would be buried under it.
-    winOpacity: popup.hasArt ? 0 : Theme.bgOpacity
+    // Fanart backdrop (TheAudioDB): the current artist's cached fanart when the
+    // shared service has one, else the album art as before. "" = no backdrop.
+    readonly property string backdropSource: FanartService.source !== ""
+        ? FanartService.source
+        : (popup.hasArt ? popup.player.trackArtUrl : "")
+    readonly property bool hasBackdrop: popup.backdropSource !== ""
+    // Fanart reads better anchored to the top (subjects), so bias its crop up;
+    // the album fallback stays vertically centred.
+    readonly property bool backdropIsFanart: FanartService.source !== ""
 
-    // App badge for the top-right corner: the player's .desktop entry icon
-    // (replaces the old identity name footer). "" = hidden (no entry/icon).
-    // The `entries` read is deliberate: heuristicLookup has no change
-    // notification and DesktopEntries scans asynchronously *after* the config
-    // loads, so reading the list first makes the lookup re-run when the scan
-    // lands (a lookup-only binding would cache null forever).
-    readonly property string appIcon: {
-        const entries = DesktopEntries.applications.values
-        if (!popup.hasPlayer || popup.player.desktopEntry === "" || entries.length === 0)
-            return ""
-        const entry = DesktopEntries.heuristicLookup(popup.player.desktopEntry)
-        if (!entry || entry.icon === "")
-            return ""
-        const path = Quickshell.iconPath(entry.icon, true)
-        return path !== "" ? path : entry.icon
+    // Keep the shared fanart service pointed at the current track's artists.
+    // Bindings (not plain assignments) because every screen's popup sets the
+    // same singleton properties; the service picks album artist or the first.
+    Binding {
+        target: FanartService
+        property: "albumArtist"
+        value: popup.player ? popup.player.trackAlbumArtist : ""
+    }
+    Binding {
+        target: FanartService
+        property: "trackArtist"
+        value: popup.player ? popup.player.trackArtist : ""
     }
 
+    // The blurred backdrop replaces the base fill (winOpacity below), so the
+    // popup keeps exactly the transparency of every other popup
+    // (colors.bgOpacity). The base Rectangle keeps drawing its border when
+    // there is no backdrop; with one the border is redrawn in the overlay layer
+    // (above the backdrop), otherwise it would be buried under it.
+    winOpacity: popup.hasBackdrop ? 0 : Theme.bgOpacity
+
     // Layers painted above the base background and below the content column:
-    // the blurred album backdrop across the whole window, then the sharp art
-    // panel flush against the popup's left border.
+    // the blurred backdrop (artist fanart, else album art) across the whole
+    // window, then the sharp album art panel flush against the left border.
     background: [
         ClippingRectangle {
-            visible: popup.hasArt
+            visible: popup.hasBackdrop
             anchors.fill: parent
             radius: Theme.popupRadius
-            // Fallback fill while the art is still loading (or if it fails).
+            // Fallback fill while the image is still loading (or if it fails).
             color: Theme.bgColor
             opacity: Theme.bgOpacity
 
@@ -80,8 +86,10 @@ BarPopup {
                 y: -30
                 width: parent.width + 60
                 height: parent.height + 60
-                source: popup.hasArt ? popup.player.trackArtUrl : ""
+                source: popup.backdropSource
                 fillMode: Image.PreserveAspectCrop
+                // Show the upper part of the fanart instead of its centre.
+                verticalAlignment: popup.backdropIsFanart ? Image.AlignTop : Image.AlignVCenter
                 asynchronous: true
                 // Decode at popup size, not the art's natural resolution: the
                 // backdrop is blurred, so full-size pixels would be wasted RAM.
@@ -92,7 +100,7 @@ BarPopup {
                 layer.enabled: true
                 layer.effect: MultiEffect {
                     blurEnabled: true
-                    blur: 1.0
+                    blur: 0.8
                     blurMax: 40
                 }
             }
@@ -100,7 +108,8 @@ BarPopup {
             // Dark tint: keeps the light theme text readable over pale artwork.
             Rectangle {
                 anchors.fill: parent
-                color: "#66000000"
+                // color: "#b3151b23"
+                color: Qt.rgba(Theme.bgBarColor.r, Theme.bgBarColor.g, Theme.bgBarColor.b, 0.75)
             }
         },
 
@@ -129,7 +138,9 @@ BarPopup {
                 visible: popup.hasArt
                 anchors.fill: parent
                 source: popup.hasArt ? popup.player.trackArtUrl : ""
-                fillMode: Image.PreserveAspectCrop
+                // Keep the whole cover (no crop): fill the container on one axis
+                // and centre it on the other (bands show the blurred backdrop).
+                fillMode: Image.PreserveAspectFit
                 asynchronous: true
                 sourceSize.width: popup.artSize * Screen.devicePixelRatio
                 sourceSize.height: popup.artSize * Screen.devicePixelRatio
@@ -159,25 +170,23 @@ BarPopup {
     // hides the base one).
     overlay: [
         Rectangle {
-            visible: popup.hasArt
+            visible: popup.hasBackdrop
             anchors.fill: parent
             radius: Theme.popupRadius
             color: "transparent"
             border.width: Theme.popupBorderWidth
             border.color: Theme.popupBorderColor
         },
-        Image {
-            visible: popup.appIcon !== ""
+        // Aries mark in the top-right corner (branding; replaces the player's
+        // app icon).
+        Icon {
+            visible: popup.hasPlayer
             anchors.top: parent.top
             anchors.right: parent.right
             anchors.margins: 14
-            width: 22
-            height: 22
-            source: popup.appIcon
-            fillMode: Image.PreserveAspectFit
-            asynchronous: true
-            sourceSize.width: 48
-            sourceSize.height: 48
+            glyph: "\ue083" // aries-ram
+            font.pixelSize: 22
+            opacity: 0.4
         }
     ]
 
@@ -206,7 +215,7 @@ BarPopup {
             anchors.bottom: parent.bottom
             x: popup.artSize + popup.artGap - popup.contentPadding
             width: parent.width - popup.artSize - popup.artGap + popup.contentPadding
-            spacing: 3
+            // spacing: 1
 
             Text {
                 visible: popup.hasPlayer
@@ -259,13 +268,13 @@ BarPopup {
             // 10px of extra air above them)
             Item {
                 width: textCol.width
-                height: controlsRow.height + 10
+                height: controlsRow.height + 5
 
                 Row {
                     id: controlsRow
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.bottom: parent.bottom
-                    spacing: 20
+                    spacing: 25
                     // Shuffle
                     Icon {
                         anchors.verticalCenter: parent.verticalCenter
@@ -303,7 +312,7 @@ BarPopup {
                         enabled: popup.player && popup.player.canTogglePlaying
                         glyph: popup.isPlaying ? "\ue032" : "\ue034" // pause : play
                         color: Theme.fgColor
-                        font.pixelSize: Theme.iconSize + 6
+                        font.pixelSize: Theme.iconSize + 10
                         opacity: enabled ? 1 : 0.35
                         MouseArea {
                             anchors.fill: parent

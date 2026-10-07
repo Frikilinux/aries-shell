@@ -1,0 +1,5 @@
+module modules.sysinfo
+singleton SysInfoService 1.0 SysInfoService.qml
+singleton SysInfoIpc 1.0 SysInfoIpc.qml
+SysInfo 1.0 SysInfo.qml
+SysInfoPopup 1.0 SysInfoPopup.qml

@@ -21,6 +21,7 @@ import "modules/mpris"
 import "modules/network"
 import "modules/bluetooth"
 import "modules/battery"
+import "modules/sysinfo"
 import "modules/power"
 import "modules/systray"
 import "modules/volume"
@@ -92,6 +93,10 @@ ShellRoot {
                         Battery {
                             output: barRoot.modelData.name
                             outputs: Config.outputs(Config.revision, "battery", barRoot.modelData.name)
+                        },
+                        SysInfo {
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "sysinfo", barRoot.modelData.name)
                         },
                         Clock {
                             output: barRoot.modelData.name

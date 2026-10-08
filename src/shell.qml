@@ -74,6 +74,10 @@ ShellRoot {
                             output: barRoot.modelData.name
                             outputs: Config.outputs(Config.revision, "offpeak", barRoot.modelData.name)
                         },
+                        SysInfo {
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "sysinfo", barRoot.modelData.name)
+                        },
                         Systray {
                             output: barRoot.modelData.name
                             outputs: Config.outputs(Config.revision, "systray", barRoot.modelData.name)
@@ -93,10 +97,6 @@ ShellRoot {
                         Battery {
                             output: barRoot.modelData.name
                             outputs: Config.outputs(Config.revision, "battery", barRoot.modelData.name)
-                        },
-                        SysInfo {
-                            output: barRoot.modelData.name
-                            outputs: Config.outputs(Config.revision, "sysinfo", barRoot.modelData.name)
                         },
                         Clock {
                             output: barRoot.modelData.name

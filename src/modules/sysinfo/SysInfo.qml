@@ -41,15 +41,15 @@ Item {
             id: tempIcon
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            glyph: "\ue044" // temperature
+            glyph: "\ue085" // cpu
             color: sysInfo.stateColor
-            font.pixelSize: Math.round(Theme.iconSize * 1.15)
+            font.pixelSize: Math.round(Theme.iconSize * 1.1)
         }
 
         Text {
             id: tempValue
             anchors.left: tempIcon.right
-            anchors.leftMargin: 4
+            anchors.leftMargin: 2
             anchors.verticalCenter: parent.verticalCenter
             text: sysInfo.hasTemperature ? Math.round(sysInfo.temperature) + "\u00b0" : "\u2014"
             color: sysInfo.stateColor

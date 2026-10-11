@@ -21,6 +21,7 @@ import "modules/mpris"
 import "modules/network"
 import "modules/bluetooth"
 import "modules/battery"
+import "modules/sysinfo"
 import "modules/power"
 import "modules/systray"
 import "modules/volume"
@@ -72,6 +73,10 @@ ShellRoot {
                         Offpeak {
                             output: barRoot.modelData.name
                             outputs: Config.outputs(Config.revision, "offpeak", barRoot.modelData.name)
+                        },
+                        SysInfo {
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "sysinfo", barRoot.modelData.name)
                         },
                         Systray {
                             output: barRoot.modelData.name

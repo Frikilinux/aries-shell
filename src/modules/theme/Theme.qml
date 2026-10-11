@@ -64,4 +64,18 @@ Singleton {
         return urgencyNormalColor
     }
 
+    // CPU temperature color (sysinfo): normal color below the warning
+    // threshold, then urgent, then peak/critical. `normal` differs between
+    // the bar (fgBarColor) and popups (fgColor).
+    function temperatureColor(temp, normal) {
+        if (temp < 0)
+            return normal
+        const t = Config.settings.modules.sysinfo
+        if (temp >= t.critTemp)
+            return peakColor
+        if (temp >= t.warnTemp)
+            return urgentColor
+        return normal
+    }
+
 }

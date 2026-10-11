@@ -116,6 +116,8 @@ Singleton {
             volume:       { outputs: ["primary"], scrollStep: 0.03, naturalScroll: true,
                             osd: { enabled: true, timeout: 1500, x: "center", y: "center" } },
             battery:      { outputs: ["primary"], lowThreshold: 20 },
+            sysinfo:      { outputs: ["primary"], warnTemp: 75, critTemp: 90,
+                            pollMs: 1000, idlePollMs: 5000, history: 90 },
             clock:        { outputs: ["primary"], timeFormat: "HH:mm", showDate: true },
             notifications:{ outputs: ["primary"],
                             maxVisible: 4,

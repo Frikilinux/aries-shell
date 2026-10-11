@@ -257,7 +257,8 @@ BarPopup {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onEntered: popup.selected = row.index
+                // Hover is visual only: it must NOT move the keyboard selection,
+                // otherwise Enter would launch whatever sits under the pointer.
                 onClicked: {
                     popup.selected = row.index
                     popup.activateSelected()

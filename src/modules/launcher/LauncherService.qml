@@ -36,6 +36,11 @@ Singleton {
     // Grid/apps glyph shared by the bar icon and the popup search box.
     readonly property string glyph: "\ue082"
 
+    // Resolved by the `systemdProbe` process. When true, launches go through
+    // `systemd-run --user --scope` so an app escapes the shell's cgroup and
+    // survives the shell being stopped/restarted (see spawnDetached()).
+    property bool systemdRun: false
+
     // Ranked matches for `query`: [{ entry, name, subtitle, nameHits, subHits,
     // score, uses }], best first. An empty query lists every app by usage
     // (most used first, then alphabetical).
@@ -295,17 +300,45 @@ Singleton {
         if (!entry)
             return
         root.recordUsage(entry)
-        if (entry.runInTerminal) {
-            const argv = root.terminalArgv(entry)
-            if (argv.length > 0) {
-                Quickshell.execDetached({
-                    command: argv,
-                    workingDirectory: entry.workingDirectory
-                })
-                return
-            }
+
+        // Terminal apps run inside the configured emulator; Quickshell's
+        // `entry.execute()` ignores `runInTerminal`, so the argv is built here.
+        let argv = null
+        if (entry.runInTerminal)
+            argv = root.terminalArgv(entry)
+        if (!argv || argv.length === 0)
+            argv = entry.command ? [].concat(entry.command) : []
+        if (argv.length === 0)
+            return
+
+        root.spawnDetached(argv, entry.workingDirectory)
+    }
+
+    // Launch `argv` detached from the shell's process lifetime. A plain child
+    // inherits quickshell's cgroup, so stopping/restarting the shell (systemd
+    // user service, a dev script, a closed terminal) tears the cgroup down and
+    // takes the app with it. `systemd-run --user --scope` moves the app into its
+    // own transient scope: it survives the shell while still inheriting the
+    // shell's environment and working directory. Falls back to Qt's detached
+    // spawn (`startDetached`, own session/cgroup on non-systemd setups) when
+    // `systemd-run` is unavailable.
+    function spawnDetached(argv, workdir) {
+        if (!argv || argv.length === 0)
+            return
+        if (root.systemdRun) {
+            const cmd = ["systemd-run", "--user", "--scope", "--quiet"]
+            if (workdir && workdir !== "")
+                cmd.push("--working-directory=" + workdir)
+            cmd.push("--")
+            for (let i = 0; i < argv.length; i++)
+                cmd.push(argv[i])
+            Quickshell.execDetached(cmd)
+            return
         }
-        entry.execute()
+        Quickshell.execDetached({
+            command: argv,
+            workingDirectory: workdir
+        })
     }
 
     // ----------------------------------------------------------- persistence
@@ -351,6 +384,14 @@ Singleton {
         command: ["/bin/sh", "-c", "mkdir -p \"$1\"", "sh", root.cacheDir]
         running: true
         onExited: root.loadState()
+    }
+
+    // Probe for `systemd-run` (options in `spawnDetached`).
+    Process {
+        id: systemdProbe
+        command: ["/bin/sh", "-c", "command -v systemd-run >/dev/null 2>&1"]
+        running: true
+        onExited: function (exitCode) { root.systemdRun = (exitCode === 0) }
     }
 
     FileView {

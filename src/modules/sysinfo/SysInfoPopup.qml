@@ -4,14 +4,10 @@ import QtQuick
 import "../theme"
 import "../icon"
 import "../popup"
-import "../battery"
 
-// CPU overview: package temperature, core count, global frequency and power
-// profile in the header card; per-core load and usage history below; the
+// CPU overview: three circular gauges (package temperature, total load and
+// average frequency) up top; per-core load and usage history below; the
 // remaining hardware facts as label/value rows.
-//
-// The power-profile pill reuses BatteryService: it is the module that owns
-// the power-profiles-daemon state (label, color, cycling).
 BarPopup {
     id: popup
 
@@ -19,8 +15,24 @@ BarPopup {
 
     readonly property real temperature: SysInfoService.temperature
     readonly property color tempColor: Theme.temperatureColor(popup.temperature, Theme.fgColor)
-    readonly property string tempText: SysInfoService.hasTemp
-        ? Math.round(popup.temperature) + "\u00b0C" : "\u2014"
+
+    // Gauge readings (display strings + 0..1 ring progress)
+    readonly property string tempValue: SysInfoService.hasTemp
+        ? Math.round(popup.temperature) : "\u2014"
+    readonly property real tempRatio: SysInfoService.hasTemp
+        ? Math.max(0, Math.min(1, popup.temperature / Math.max(1, SysInfoService.critTemp))) : 0
+
+    readonly property string loadValue: SysInfoService.usageReady
+        ? Math.round(SysInfoService.usage) : "\u2014"
+    readonly property real loadRatio: SysInfoService.usageReady
+        ? SysInfoService.usage / 100 : 0
+
+    readonly property string freqValue: SysInfoService.hasFreq
+        ? (SysInfoService.freqMHz / 1000).toFixed(1) : "\u2014"
+    readonly property real freqScale: SysInfoService.maxFreqMHz > 0 ? SysInfoService.maxFreqMHz
+        : (SysInfoService.freqMaxMHz > 0 ? SysInfoService.freqMaxMHz : 5000)
+    readonly property real freqRatio: SysInfoService.hasFreq
+        ? Math.max(0, Math.min(1, SysInfoService.freqMHz / Math.max(1, popup.freqScale))) : 0
 
     function popupOpened() {
         SysInfoService.detail = true
@@ -77,108 +89,155 @@ BarPopup {
     }
 
     // ------------------------------------------------------------------
-    // Header card: cores + global frequency | temperature | power profile
+    // Circular gauge (temperature / load / frequency)
     // ------------------------------------------------------------------
-    Rectangle {
-        id: headerCard
-        width: parent.width
-        radius: 6
-        color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.05)
-        border.width: 1
-        border.color: Theme.buttonBorder
-        implicitHeight: coreColumn.implicitHeight + 22
+    component CircleGauge: Item {
+        id: gauge
 
-        Column {
-            id: coreColumn
-            anchors.left: parent.left
-            anchors.leftMargin: 12
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 1
+        required property string label
+        required property string valueText
+        required property string unitText
+        required property real ratio
+        required property color ringColor
+        property color valueColor: Theme.fgColor
+
+        readonly property int ringSize: Math.min(88, Math.max(48, gauge.width - 8))
+        implicitHeight: ringSize + labelText.implicitHeight + 7
+
+        function css(c, a) {
+            return "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255)
+                + "," + Math.round(c.b * 255) + "," + a + ")"
+        }
+
+        Item {
+            id: ringBox
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            width: gauge.ringSize
+            height: gauge.ringSize
+
+            Rectangle {
+                anchors.fill: parent
+                radius: width / 2
+                color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.04)
+                border.width: 1
+                border.color: Theme.buttonBorder
+            }
+
+            Canvas {
+                id: ringCanvas
+                anchors.fill: parent
+                antialiasing: true
+
+                property real frac: Math.max(0, Math.min(1, gauge.ratio))
+                onFracChanged: ringCanvas.requestPaint()
+                onWidthChanged: ringCanvas.requestPaint()
+                onHeightChanged: ringCanvas.requestPaint()
+                Component.onCompleted: ringCanvas.requestPaint()
+
+                onPaint: {
+                    const ctx = getContext("2d")
+                    const w = ringCanvas.width
+                    const h = ringCanvas.height
+                    ctx.clearRect(0, 0, w, h)
+                    if (w <= 0 || h <= 0)
+                        return
+
+                    const lw = Math.max(3, Math.round(Math.min(w, h) * 0.08))
+                    const r = (Math.min(w, h) - lw) / 2
+                    const cx = w / 2
+                    const cy = h / 2
+
+                    ctx.lineWidth = lw
+                    ctx.lineCap = "round"
+
+                    // Full track ring
+                    ctx.beginPath()
+                    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                    ctx.strokeStyle = gauge.css(Theme.fgColor, 0.12)
+                    ctx.stroke()
+
+                    // Value arc, clockwise from the top
+                    if (ringCanvas.frac > 0) {
+                        ctx.beginPath()
+                        ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ringCanvas.frac)
+                        ctx.strokeStyle = gauge.css(gauge.ringColor, 1)
+                        ctx.stroke()
+                    }
+                }
+            }
 
             Row {
-                id: coreCountRow
-                spacing: 5
+                anchors.centerIn: parent
+                spacing: 2
 
                 Text {
-                    id: coreCount
-                    text: SysInfoService.coresLogical > 0 ? SysInfoService.coresLogical : "\u2014"
-                    color: Theme.fgColor
+                    id: gaugeValue
+                    text: gauge.valueText
+                    color: gauge.valueColor
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize + 8
+                    font.pixelSize: Theme.fontSize + 5
                     font.bold: true
                     font.features: { "tnum": 1 }
                 }
 
                 Text {
-                    anchors.baseline: coreCount.baseline
-                    text: "CORES"
-                    color: Theme.fgColor
+                    anchors.baseline: gaugeValue.baseline
+                    text: gauge.unitText
+                    visible: gauge.unitText !== ""
+                    color: Theme.fgColorMuted
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize - 4
-                    font.bold: true
-                    font.letterSpacing: 1
+                    font.pixelSize: Theme.fontSize - 5
                 }
             }
-
-            Text {
-                text: SysInfoService.formatFreq(SysInfoService.freqMHz)
-                color: Theme.fgColorMuted
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSize - 1
-                font.features: { "tnum": 1 }
-            }
         }
 
-        Row {
-            id: tempRow
-            anchors.centerIn: parent
-            spacing: 6
+        Text {
+            id: labelText
+            anchors.top: ringBox.bottom
+            anchors.topMargin: 5
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: gauge.label
+            color: Theme.fgColorMuted
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize - 5
+            font.letterSpacing: 1.5
+        }
+    }
 
-            Icon {
-                anchors.baseline: tempValue.baseline
-                glyph: "\ue044" // temperature
-                color: popup.tempColor
-                font.pixelSize: Math.round(Theme.fontSize * 1.7)
-            }
+    // ------------------------------------------------------------------
+    // Gauges: temperature | load | frequency
+    // ------------------------------------------------------------------
+    Row {
+        width: parent.width
+        spacing: 4
 
-            Text {
-                id: tempValue
-                text: popup.tempText
-                color: popup.tempColor
-                font.family: Theme.fontFamily
-                font.pixelSize: Math.round(Theme.fontSize * 2.3)
-                font.bold: true
-                font.features: { "tnum": 1 }
-            }
+        CircleGauge {
+            width: (parent.width - parent.spacing * 2) / 3
+            label: "TEMP"
+            valueText: popup.tempValue
+            unitText: "\u00b0C"
+            ratio: popup.tempRatio
+            ringColor: Theme.accentColor
+            valueColor: popup.tempColor
         }
 
-        Rectangle {
-            id: profilePill
-            anchors.right: parent.right
-            anchors.rightMargin: 12
-            anchors.verticalCenter: parent.verticalCenter
-            width: profileText.implicitWidth + 16
-            height: 22
-            radius: 11
-            color: Qt.rgba(BatteryService.powerProfileColor.r, BatteryService.powerProfileColor.g,
-                           BatteryService.powerProfileColor.b, 0.35)
-            border.width: 1
-            border.color: Theme.buttonBorder
+        CircleGauge {
+            width: (parent.width - parent.spacing * 2) / 3
+            label: "LOAD"
+            valueText: popup.loadValue
+            unitText: "%"
+            ratio: popup.loadRatio
+            ringColor: Theme.accentColor
+        }
 
-            Text {
-                id: profileText
-                anchors.centerIn: parent
-                text: BatteryService.powerProfileLabel
-                color: Theme.fgColor
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSize - 4
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: BatteryService.cyclePowerProfile()
-            }
+        CircleGauge {
+            width: (parent.width - parent.spacing * 2) / 3
+            label: "FREQ"
+            valueText: popup.freqValue
+            unitText: "GHz"
+            ratio: popup.freqRatio
+            ringColor: Theme.accentColor
         }
     }
 
@@ -195,19 +254,12 @@ BarPopup {
             width: Math.round((popup.contentWidth - chartsRow.spacing) * 0.42)
             spacing: 4
 
-            Item {
-                width: parent.width
-                height: 14
-
-                Text {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "PER CORE"
-                    color: Theme.fgColorMuted
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize - 5
-                    font.letterSpacing: 1.5
-                }
+            Text {
+                text: "PER CORE"
+                color: Theme.fgColorMuted
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize - 5
+                font.letterSpacing: 1.5
             }
 
             Rectangle {
@@ -273,30 +325,12 @@ BarPopup {
             width: popup.contentWidth - coreChart.width - chartsRow.spacing
             spacing: 4
 
-            Item {
-                width: parent.width
-                height: 14
-
-                Text {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "USAGE"
-                    color: Theme.fgColorMuted
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize - 5
-                    font.letterSpacing: 1.5
-                }
-
-                Text {
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: SysInfoService.usageReady ? Math.round(SysInfoService.usage) + "%" : "\u2014"
-                    color: Theme.fgColor
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize - 5
-                    font.letterSpacing: 1.5
-                    font.features: { "tnum": 1 }
-                }
+            Text {
+                text: "USAGE"
+                color: Theme.fgColorMuted
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize - 5
+                font.letterSpacing: 1.5
             }
 
             Rectangle {
@@ -464,20 +498,4 @@ BarPopup {
         value: SysInfoService.formatLoad()
     }
 
-    InfoRow {
-        label: "Frequency"
-        glyph: "\ue086" // gauge
-        value: SysInfoService.formatFreq(SysInfoService.freqMHz)
-            + (SysInfoService.freqMaxMHz > 0
-                ? "   \u00b7   max " + SysInfoService.formatFreq(SysInfoService.freqMaxMHz) : "")
-    }
-
-    InfoRow {
-        label: "Governor"
-        glyph: "\ue071" // settings
-        value: SysInfoService.governor !== ""
-            ? SysInfoService.governor + (SysInfoService.energyPref !== ""
-                ? " \u00b7 " + SysInfoService.energyPref : "")
-            : "\u2014"
-    }
 }

@@ -83,6 +83,8 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "aries-popup"
     // Accept keys while the popup is open (e.g. the Wi-Fi password prompt).
+    // Granted on open via grabKeys() below (Exclusive flick -> OnDemand), so
+    // the popup reliably holds keyboard focus instead of relying on hover.
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
     visible: false
@@ -98,11 +100,28 @@ PanelWindow {
         if (visible) {
             popup.refreshItemPos()
             Popups.open(popup)
+            popup.grabKeys()
             popup.popupOpened()
         } else {
             Popups.close(popup)
             popup.popupClosed()
         }
+    }
+
+    // Grab keyboard focus for the 90ms flick (mirrors TrayMenu.grabKeys and
+    // PopupWindow's grabFocus), so the popup holds Wayland keyboard focus when
+    // it opens. Without this a popup could open without focus, leaving its text
+    // fields and Escape handling dead until the user clicks into it.
+    function grabKeys() {
+        popup.WlrLayershell.keyboardFocus = WlrKeyboardFocus.Exclusive
+        keyGrabTimer.restart()
+    }
+
+    Timer {
+        id: keyGrabTimer
+        interval: 90
+        repeat: false
+        onTriggered: popup.WlrLayershell.keyboardFocus = WlrKeyboardFocus.OnDemand
     }
 
     // On explicit show, recentre once the compositor's first configure lands:
@@ -147,10 +166,9 @@ PanelWindow {
             popup.margins.top = my
     }
 
-    Shortcut {
-        sequence: "Escape"
-        onActivated: popup.visible = false
-    }
+    // Escape-to-close is handled centrally by the ApplicationShortcut in
+    // Popups.qml (active whenever this popup has keyboard focus), so it is not
+    // repeated here.
 
     // Themed popup background (rounded corners + border)
     Rectangle {

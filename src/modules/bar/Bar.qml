@@ -19,9 +19,12 @@ PanelWindow {
     // Wayland layer-shell namespace reported by compositors (e.g. niri msg layers)
     WlrLayershell.namespace: "aries"
 
-    // Allow the bar to take keyboard focus on click so that popups with text
-    // inputs (e.g. the Wi-Fi password prompt) can receive keystrokes.
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    // The bar is an always-visible surface, so it must NOT take keyboard focus:
+    // with OnDemand the compositor grants focus on hover, which steals it from
+    // the focused app (and triggers Qt's `qt.qpa.wayland.textinput` race
+    // warning). The bar only needs pointer input (click/scroll); keyboard focus
+    // for popups is handled by each popup itself (see BarPopup.grabKeys()).
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
     // Zones where modules are added (from shell.qml or any Bar instance)
     property alias left: leftRow.data
@@ -55,14 +58,9 @@ PanelWindow {
         onClicked: Popups.closeAll()
     }
 
-    // Popups are layer-shell surfaces (not xdg popups), so they no longer grab
-    // keys or auto-dismiss. The click that opens a popup leaves keyboard focus
-    // on the bar, so Esc is handled here (plus per-popup Shortcut for when the
-    // popup itself has focus, e.g. after typing in the Wi-Fi field).
-    Shortcut {
-        sequence: "Escape"
-        onActivated: Popups.closeAll()
-    }
+    // Escape-to-close is handled centrally by a single ApplicationShortcut in
+    // Popups.qml (active whenever any Quickshell window has focus), so it is
+    // not repeated here. The bar itself never holds keyboard focus.
 
     Zone {
         id: leftRow

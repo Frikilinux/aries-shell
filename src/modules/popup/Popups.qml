@@ -10,6 +10,17 @@ Singleton {
 
     property var current: null
 
+    // Single, central Escape handler for every popup (and the bar). With
+    // Qt.ApplicationShortcut it fires whenever any Quickshell window holds
+    // keyboard focus, so it does not depend on *which* surface has focus (the
+    // bar never takes focus; popups grab it on open via BarPopup.grabKeys()).
+    // Quickshell is its own process, so this never intercepts an app's Escape.
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.ApplicationShortcut
+        onActivated: root.closeAll()
+    }
+
     function open(win) {
         if (root.current === win)
             return

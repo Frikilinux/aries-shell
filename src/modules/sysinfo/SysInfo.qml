@@ -1,7 +1,7 @@
 import QtQuick
 import "../theme"
 import "../icon"
-import "../config"
+// import "../config"
 
 // CPU temperature in the bar: thermometer glyph + current package value.
 // The number shares the thermometer's color (normal / warm / hot), and the

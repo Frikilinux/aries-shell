@@ -28,6 +28,13 @@ PanelWindow {
     // (used by the launcher).
     property bool centered: false
 
+    // Hold Exclusive keyboard focus for the whole time the popup is open,
+    // skipping the default Exclusive->OnDemand flick. Keyboard-first popups
+    // (the launcher) need this: an OnDemand layer surface only keeps Wayland
+    // keyboard focus while the pointer is over it, so typing breaks as soon
+    // as the mouse leaves the surface.
+    property bool holdKeyboardFocus: false
+
     // Popup dimensions
     property int popupWidth: 340
     property int maxContentHeight: 540
@@ -85,7 +92,10 @@ PanelWindow {
     // Accept keys while the popup is open (e.g. the Wi-Fi password prompt).
     // Granted on open via grabKeys() below (Exclusive flick -> OnDemand), so
     // the popup reliably holds keyboard focus instead of relying on hover.
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    // With `holdKeyboardFocus` the surface stays Exclusive while visible.
+    WlrLayershell.keyboardFocus: popup.holdKeyboardFocus
+        ? WlrKeyboardFocus.Exclusive
+        : WlrKeyboardFocus.OnDemand
 
     visible: false
     color: "transparent"
@@ -113,6 +123,10 @@ PanelWindow {
     // it opens. Without this a popup could open without focus, leaving its text
     // fields and Escape handling dead until the user clicks into it.
     function grabKeys() {
+        // `holdKeyboardFocus` already binds Exclusive (see above); don't
+        // touch it, an imperative write would kill that binding.
+        if (popup.holdKeyboardFocus)
+            return
         popup.WlrLayershell.keyboardFocus = WlrKeyboardFocus.Exclusive
         keyGrabTimer.restart()
     }

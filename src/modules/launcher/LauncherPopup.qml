@@ -22,6 +22,10 @@ BarPopup {
     // The launcher opens centred on the screen, not under a bar icon.
     centered: true
 
+    // Keyboard-first popup: keep Exclusive focus while open (no flick), so
+    // typing works even with the pointer off the surface.
+    holdKeyboardFocus: true
+
     readonly property var results: LauncherService.results
 
     // Keyboard-selected result (0 = best match).

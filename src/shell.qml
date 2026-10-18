@@ -13,6 +13,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import "modules/bar"
+import "modules/popup"
 import "modules/config"
 import "modules/clock"
 import "modules/workspaces"
@@ -116,17 +117,26 @@ ShellRoot {
         }
     }
 
-    // Desktop wallpaper + transparent click-catcher (one module, two surfaces):
-    // the background-layer wallpaper also lives in niri's Overview backdrop and
-    // ignores input, so a separate top-layer scrim (below the popups, above the
-    // windows) does the popup dismissal on outside clicks. Screens filtered via
-    // Config.outputs("wallpaper").
+    // Desktop wallpaper (one Background-layer surface per screen; niri's
+    // `place-within-backdrop` rule also pins it into the Overview backdrop).
+    // Screens filtered via Config.outputs("wallpaper").
     Variants {
         model: Quickshell.screens
         Wallpaper {
             id: wallpaperRoot
             outputs: Config.outputs(Config.revision, "wallpaper", wallpaperRoot.modelData.name)
         }
+    }
+
+    // Popup dismissal scrim (one Top-layer surface per screen): while a popup
+    // or tray menu is open it sits below the Overlay popups and above the
+    // windows, so outside clicks dismiss the popup and hover never reaches a
+    // window (focus-follows-mouse safe; Esc likewise while hovering it). See
+    // modules/popup/. NOT filtered by Config.outputs: a popup is modal, so it
+    // must cover windows on every output.
+    Variants {
+        model: Quickshell.screens
+        PopupScrim {}
     }
 
     // Volume OSD: transient overlay while the default sink's volume/mute

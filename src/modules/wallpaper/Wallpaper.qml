@@ -2,25 +2,13 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import "../config"
-import "../popup"
 
-// Desktop wallpaper + empty-desktop click-catcher, combined into one module so
-// a single Variants block serves both (invisible Item root owning the two
-// windows). Two layer-shell surfaces per screen:
-//
-//  * wallpaper (Background layer, ns "wallpaper"): renders the configured image
-//    behind windows. niri's existing layer-rule `^wallpaper$` +
-//    `place-within-backdrop` ALSO moves this surface into the Overview backdrop.
-//    Backdrop surfaces ignore ALL input, so popup dismissal can never live here
-//    — that's what the scrim surface is for.
-//
-//  * scrim (Top layer, ns "aries-scrim"): transparent full-screen layer shown
-//    only while a popup/tray menu is open. It sits ABOVE windows but BELOW the
-//    Overlay-layer popups, so while a popup is open hover never reaches a
-//    window (focus-follows-mouse can't retarget focus), a click outside the
-//    popup closes it, and the popups themselves stay fully interactive. The bar
-//    strip is left uncovered, so the bar keeps its own clicks. Its unique
-//    namespace lets niri's layer-rules skip the global blur/shadow for it.
+// Desktop wallpaper. Per screen, an invisible Item root owns a single
+// background-layer surface. niri's existing layer-rule `^wallpaper$` +
+// `place-within-backdrop` ALSO moves this surface into the Overview backdrop.
+// Backdrop surfaces ignore ALL input, so popup dismissal does NOT live here —
+// that's `modules/popup/PopupScrim.qml` (top layer, above windows, below the
+// popups).
 Item {
     id: root
 
@@ -69,7 +57,6 @@ Item {
         Config.save()
     }
 
-    // ---------------------------------------------------------------- wallpaper
     PanelWindow {
         id: wall
         screen: root.modelData
@@ -124,53 +111,6 @@ Item {
             visible: root.wallVisible
             color: "#000000"
             opacity: Config.settings.modules.wallpaper.dim
-        }
-    }
-
-    // ------------------------------------------------------------------- scrim
-    // Transparent layer surface shown while a bar popup or tray menu is open
-    // (`Popups.current != null`): it covers the whole screen below the bar, so
-    // a click anywhere outside the popup dismisses it AND hover never reaches a
-    // window underneath. niri's focus-follows-mouse fires WindowFocusChanged on
-    // plain hover (and already focuses windows before any click), so popups must
-    // NOT dismiss on focus change — only on actual input; covering the windows
-    // is also what keeps the mouse from retargeting focus while a popup is open.
-    // Top layer puts it above windows but below the Overlay-layer popups/menus
-    // (which therefore keep receiving input). The bar strip is excluded
-    // geometrically, so the two Top surfaces never overlap and the bar keeps its
-    // clicks; that also makes the stacking order between them irrelevant.
-    // Keyboard stays None; popups manage their own focus.
-    PanelWindow {
-        id: scrim
-        screen: root.modelData
-
-        color: "transparent"
-        // Cover EVERY screen while a popup/menu is open. Limiting this to the
-        // popup's own screen left the other outputs uncovered, so moving the
-        // pointer onto a window there hit focus-follows-mouse (focus change ->
-        // popup closed). A popup is modal, so covering all outputs is correct.
-        visible: Popups.current !== null
-
-        WlrLayershell.layer: WlrLayer.Top
-        WlrLayershell.namespace: "aries-scrim"
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        // Never reserve space and never dodge other panels (bar included): the
-        // geometry below is exact, and windows are never pushed around.
-        exclusionMode: ExclusionMode.Ignore
-
-        // Full width, from just under the bar down to the bottom edge, so the
-        // bar strip stays free for its own clicks (toggle/close popups).
-        anchors {
-            bottom: true
-            left: true
-            right: true
-        }
-        implicitHeight: root.modelData.height - Config.settings.bar.height
-
-        // Any click outside the popup/menu: close it.
-        MouseArea {
-            anchors.fill: parent
-            onClicked: Popups.closeAll()
         }
     }
 }

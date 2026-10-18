@@ -19,12 +19,22 @@ PanelWindow {
     // Wayland layer-shell namespace reported by compositors (e.g. niri msg layers)
     WlrLayershell.namespace: "aries"
 
-    // The bar is an always-visible surface, so it must NOT take keyboard focus:
-    // with OnDemand the compositor grants focus on hover, which steals it from
-    // the focused app (and triggers Qt's `qt.qpa.wayland.textinput` race
-    // warning). The bar only needs pointer input (click/scroll); keyboard focus
+    // The bar is an always-visible surface, so normally it must NOT take
+    // keyboard focus: Exclusive would steal the focused app's input, and even
+    // OnDemand grants focus on hover (the documented `qt.qpa.wayland.textinput`
+    // race). The bar only needs pointer input (click/scroll); keyboard focus
     // for popups is handled by each popup itself (see BarPopup.grabKeys()).
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    //
+    // Bound exception: while a popup is open, OnDemand hands the keyboard to
+    // whichever shell surface the pointer rests on — hovering the bar keeps
+    // the central Esc-to-close Shortcut (Popups.qml) armed, same as hovering
+    // the popup itself. With a popup open the scrim covers every other point
+    // of the screen the same way, so no window can be hovered meanwhile; once
+    // it closes the binding reverts to None and hovering the bar steals
+    // nothing (a keypress goes to the focused app instead of into the bar).
+    WlrLayershell.keyboardFocus: Popups.current !== null
+        ? WlrKeyboardFocus.OnDemand
+        : WlrKeyboardFocus.None
 
     // Zones where modules are added (from shell.qml or any Bar instance)
     property alias left: leftRow.data
@@ -59,8 +69,10 @@ PanelWindow {
     }
 
     // Escape-to-close is handled centrally by a single ApplicationShortcut in
-    // Popups.qml (active whenever any Quickshell window has focus), so it is
-    // not repeated here. The bar itself never holds keyboard focus.
+    // Popups.qml (active whenever any Quickshell surface holds keyboard focus),
+    // so it is not repeated here: with a popup open the popup (own focus), the
+    // scrim and this bar (OnDemand above) all route keyboard here. Without an
+    // open popup the bar is None again and Esc stays with the focused app.
 
     Zone {
         id: leftRow

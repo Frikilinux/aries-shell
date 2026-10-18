@@ -277,8 +277,8 @@ Singleton {
             // (and niri pre-focuses a window before the click lands), which
             // would close a popup the instant the pointer leaves it — e.g.
             // over a window on another output. Outside clicks are handled by
-            // the transparent scrim layer (Wallpaper.qml), the bar's own
-            // MouseArea, and Esc instead.
+            // the transparent scrim layer (modules/popup/PopupScrim.qml), the
+            // bar's own MouseArea, and Esc instead.
         }
     }
 }

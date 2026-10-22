@@ -1,0 +1,4 @@
+module modules.rss
+singleton RssService 1.0 RssService.qml
+Rss 1.0 Rss.qml
+RssPopup 1.0 RssPopup.qml

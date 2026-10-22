@@ -32,6 +32,7 @@ import "modules/notifications"
 import "modules/wallpaper"
 import "modules/launcher"
 import "modules/polkit"
+import "modules/rss"
 
 ShellRoot {
     // The bar (one per screen). Built once the user config has been read so
@@ -74,6 +75,10 @@ ShellRoot {
                         Offpeak {
                             output: barRoot.modelData.name
                             outputs: Config.outputs(Config.revision, "offpeak", barRoot.modelData.name)
+                        },
+                        Rss {
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "rss", barRoot.modelData.name)
                         },
                         SysInfo {
                             output: barRoot.modelData.name

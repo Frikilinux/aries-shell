@@ -141,7 +141,12 @@ Singleton {
                             path: "",
                             fillMode: "crop",
                             position: "center",
-                            dim: 0.0 }
+                            dim: 0.0 },
+            rss:          { outputs: ["primary"],
+                            feeds: [],
+                            refreshInterval: 60,
+                            maxAgeDays: 15,
+                            maxPerFeed: 4 }
         }
     })
 

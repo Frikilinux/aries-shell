@@ -56,9 +56,10 @@ BarPopup {
         return dev.address
     }
 
-    // Battery glyph for a device. BlueZ reports a 0..1 fraction.
+    // Battery glyph for a device. BlueZ reports a 0..1 fraction. Uses the plain
+    // level glyph: the local battery's charger state must not leak in here.
     function deviceBatteryGlyph(dev) {
-        return BatteryService.batteryGlyph(dev.battery * 100, false)
+        return BatteryService.batteryLevelGlyph(dev.battery * 100)
     }
 
     // Battery level as a percentage string (0..100)

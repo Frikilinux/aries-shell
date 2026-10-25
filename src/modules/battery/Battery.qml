@@ -18,7 +18,8 @@ Item {
     // Below this percentage (and not charging) the icon turns urgent-colored
     property int lowThreshold: Config.settings.modules.battery.lowThreshold
     // Faint green used while a charge limit is active
-    property color limitColor: "#8fbf8f"
+    // property color limitColor: "#8fbf8f"
+    property color limitColor: Theme.fgBarColor
 
     readonly property bool present: BatteryService.present
     readonly property real percent: BatteryService.percentage
@@ -41,7 +42,7 @@ Item {
         // Battery level, with the bolt variant while the charger is plugged in
         glyph: BatteryService.batteryGlyph(battery.percent, battery.plugged)
         color: battery.stateColor
-        font.pixelSize: Math.round(Theme.iconSize * 1.4)
+        font.pixelSize: Math.round(Theme.iconSize * 1.5)
     }
 
     MouseArea {

@@ -184,11 +184,26 @@ Singleton {
         "\ue013", "\ue014", "\ue015", "\ue016", "\ue00c"
     ]
 
-    // Battery icon for a 0..100 percentage, rounded to the nearest 10% step.
-    // When charging, the matching battery-with-bolt variant is returned.
-    function batteryGlyph(percent, charging) {
+    // Shown while the charger is connected but the charge has not started yet
+    readonly property string saverGlyph: "\ue018"
+
+    // Plain level glyph for a 0..100 percentage, rounded to the nearest 10%
+    // step. Ignores the local charger state -> use it for peripheral batteries
+    // (Bluetooth devices), which must only reflect their own charge.
+    function batteryLevelGlyph(percent) {
         const level = Math.max(0, Math.min(10, Math.round(percent / 10)))
-        return charging ? root.chargeGlyphs[level] : root.batteryGlyphs[level]
+        return root.batteryGlyphs[level]
+    }
+
+    // Battery icon for a 0..100 percentage.
+    // When charging, the matching battery-with-bolt variant is returned; while
+    // the charge is pending (charger just plugged in) the saver icon is used.
+    function batteryGlyph(percent, charging) {
+        if (root.state === UPowerDeviceState.PendingCharge)
+            return root.saverGlyph
+        if (charging)
+            return root.chargeGlyphs[Math.max(0, Math.min(10, Math.round(percent / 10)))]
+        return root.batteryLevelGlyph(percent)
     }
 
     readonly property string stateText: {

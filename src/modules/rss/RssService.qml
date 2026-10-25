@@ -114,7 +114,13 @@ Singleton {
             const proc = fetchComp.createObject(root, {
                 feedUrl: url,
                 service: root,
-                command: ["curl", "-sSfL", "--connect-timeout", "5", "--max-time", "15", url]
+                command: ["curl", "-sSfL",
+                    "--connect-timeout", "5", "--max-time", "15",
+                    // Browser-looking client (see userAgent above).
+                    "-A", root.userAgent,
+                    "-H", "Accept: application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "-H", "Accept-Language: en-US,en;q=0.9",
+                    url]
             })
             root.fetchObjects.push(proc)
             proc.running = true
@@ -200,6 +206,13 @@ Singleton {
             .replace(/^www\./i, "").split(/[/?#]/)[0]
         return host !== "" ? host : ("" + url)
     }
+
+    // Modern browser identity for the fetches: several sites (WAFs, e.g.
+    // Cloudflare-adjacent) block no-UA / old-UA requests outright. Not
+    // guaranteed to beat a JS challenge, but it recovers plain
+    // UA-sniffing blocks that curl's default agent gets.
+    readonly property string userAgent:
+        "Mozilla/5.0 (X11; Linux x86_64; rv:144.0) Gecko/20100101 Firefox/144.0"
 
     // Date -> relative "now" / "3m" / "3h" / "2d".
     function formatRelative(time) {

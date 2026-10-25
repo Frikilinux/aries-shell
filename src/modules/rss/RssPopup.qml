@@ -17,7 +17,7 @@ BarPopup {
         required property var modelData
 
         width: popup.contentWidth
-        height: title.implicitHeight + meta.implicitHeight + 14
+        height: title.implicitHeight + metaRow.height + 14
 
         Rectangle {
             anchors.fill: parent
@@ -46,13 +46,37 @@ BarPopup {
                 maximumLineCount: 2
             }
 
-            Text {
-                id: meta
-                text: row.modelData.source + " · " + RssService.formatRelative(row.modelData.time)
-                color: Theme.fgColorMuted
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSize - 3
-                elide: Text.ElideRight
+            // Meta line: the feed url label (host) in the accent color, the
+            // relative date stays muted. Source elides left; the date stays
+            // fully visible (pinned right).
+            Item {
+                id: metaRow
+                width: parent.width
+                height: Math.max(sourceLabel.implicitHeight, dateLabel.implicitHeight)
+
+                Text {
+                    id: sourceLabel
+                    anchors.left: parent.left
+                    anchors.right: dateLabel.left
+                    anchors.rightMargin: 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: row.modelData.source
+                    color: Theme.accentColor
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSize - 3
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    id: dateLabel
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: " · " + RssService.formatRelative(row.modelData.time)
+                    color: Theme.fgColorMuted
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSize - 3
+                    elide: Text.ElideRight
+                }
             }
         }
 
@@ -141,4 +165,85 @@ BarPopup {
         model: RssService.displayed
         delegate: NewsRow {}
     }
+
+    // Scroll hints (in the overlay layer, above the content): a soft bg fade
+    // plus a chevron whenever hidden news sits above/below. The row fades and
+    // the chevron is not interactive-blocking: plain Items don't grab mouse
+    // events, so row clicks still land underneath; the chevron itself is
+    // click-to-scroll (half a page per tap).
+    overlay: [
+        Item {
+            id: topHint
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 22
+            visible: popup.contentScrolls && !popup.scrollAtTop
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: popup.contentPadding
+                anchors.rightMargin: popup.contentPadding
+                anchors.topMargin: 2
+                height: parent.height - 2
+                radius: 6
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.rgba(popup.winColor.r, popup.winColor.g, popup.winColor.b, 0.8) }
+                    GradientStop { position: 1.0; color: Qt.rgba(popup.winColor.r, popup.winColor.g, popup.winColor.b, 0.0) }
+                }
+            }
+
+            Icon {
+                anchors.centerIn: parent
+                glyph: "\ue02d" // chevron-up
+                color: Theme.fgColorMuted
+                font.pixelSize: Theme.iconSize - 2
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: popup.contentFlick.flick(0, popup.height)
+            }
+        },
+
+        Item {
+            id: bottomHint
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 22
+            visible: popup.contentScrolls && !popup.scrollAtBottom
+
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: popup.contentPadding
+                anchors.rightMargin: popup.contentPadding
+                anchors.bottomMargin: 2
+                height: parent.height - 2
+                radius: 6
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.rgba(popup.winColor.r, popup.winColor.g, popup.winColor.b, 0.0) }
+                    GradientStop { position: 1.0; color: Qt.rgba(popup.winColor.r, popup.winColor.g, popup.winColor.b, 0.8) }
+                }
+            }
+
+            Icon {
+                anchors.centerIn: parent
+                glyph: "\ue02a" // chevron-down
+                color: Theme.fgColorMuted
+                font.pixelSize: Theme.iconSize - 2
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: popup.contentFlick.flick(0, -popup.height)
+            }
+        }
+    ]
 }

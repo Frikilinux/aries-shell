@@ -18,6 +18,22 @@ Item {
     property int iconSize: Theme.iconSize
     // Recolor theme (monochrome) icons to the bar foreground (see TrayIcon).
     property bool recolor: true
+    // Recolor app-provided icon pixmaps too (`recolorPixmaps`), except ids
+    // listed in `pixmapsNoRecolor` (SystemTrayItem.id). The decision lands in
+    // the single `colorize` bool passed to TrayIcon, so all sources share one
+    // MultiEffect layer with the same fg color.
+    property bool recolorPixmaps: false
+    property var pixmapsNoRecolor: []
+
+    // Whether this item's icon gets the fg tint: theme icons honor `recolor`
+    // (monochrome theme icons), everything else (app pixmaps) honors
+    // `recolorPixmaps` unless its id is excluded.
+    readonly property bool colorize: root.isThemed
+        ? root.recolor
+        : root.recolorPixmaps && !root.pixmapsNoRecolor.includes(root.item.id)
+    // `item.icon` resolution prefixes: theme icons (`image://icon/`) vs
+    // app-provided pixmaps/documents (`image://qspixmap/`, `file://`).
+    readonly property bool isThemed: root.item.icon.startsWith("image://icon/")
 
     // Extra hover area around the icon (does not affect layout size)
     property int itemPadding: 5
@@ -31,7 +47,7 @@ Item {
         anchors.centerIn: parent
         name: root.item.icon
         iconSize: root.iconSize
-        recolor: root.recolor
+        colorize: root.colorize
     }
 
     // Context menu, dropped below the bar and centered on this icon

@@ -23,6 +23,16 @@ Item {
     // MultiEffect layer. Turn off to skip the extra FBO + shader per icon (the
     // icons then keep their own theme color).
     property bool recolor: Config.settings.modules.systray.recolor
+    // Also recolor app-provided icons (pixmaps: `image://qspixmap/`, `file://`)
+    // to the bar foreground. Off by default: flattening a full-color brand icon
+    // to a silhouette is a strong visual change. Not applied to ids listed in
+    // `pixmapsNoRecolor` (see below).
+    property bool recolorPixmaps: Config.settings.modules.systray.recolorPixmaps
+    // Tray item ids (SystemTrayItem.id, e.g. "telegram" — the same string shown
+    // by `niri msg layers`/tray listings) whose app icons must never be
+    // recolored, even with `recolorPixmaps` on. For icons that look wrong
+    // flattened to one color.
+    property var pixmapsNoRecolor: Config.settings.modules.systray.pixmapsNoRecolor
     // Gap between consecutive icons.
     property int spacing: Theme.spacing
 
@@ -44,6 +54,8 @@ Item {
                 item: modelData
                 iconSize: systray.iconSize
                 recolor: systray.recolor
+                recolorPixmaps: systray.recolorPixmaps
+                pixmapsNoRecolor: systray.pixmapsNoRecolor
             }
         }
     }

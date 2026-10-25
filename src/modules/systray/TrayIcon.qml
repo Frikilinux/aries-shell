@@ -8,9 +8,13 @@ import "../theme"
 // supplied by the application itself, or a `file://` URL. Passing it straight
 // to an Image is all it takes to "apply the icon theme".
 //
-// Theme icons are monochrome SVGs (Qt does not resolve `currentColor`), so
-// they are painted with the bar foreground color via a MultiEffect layer. Icons
-// the application supplies itself keep their own colors.
+// When `colorize` is on, the icon is painted with the bar foreground color
+// via a MultiEffect layer: the alpha (shape) is preserved, the RGB is flattened
+// to one color (a silhouette). That is the correct treatment for monochrome
+// theme SVGs (Qt does not resolve `currentColor`); for app-provided pixmaps it
+// turns the icon into a solid fg glyph, which callers enable/disable through
+// the `recolorPixmaps` policy (see TrayItem — the recolor decision lives there,
+// including the id exclusion list).
 
 Item {
     id: root
@@ -19,13 +23,9 @@ Item {
     property string name: ""
     // Displayed size of the icon in px
     property int iconSize: Theme.iconSize
-    // Recolor theme (monochrome) icons to the bar foreground. Costs a per-icon
-    // offscreen layer + shader; disable to render them in their own color.
-    property bool recolor: true
-
-    // Theme-provided icons (`image://icon/`) are recolored to the bar
-    // foreground; app-provided pixmaps/documents are left untouched.
-    readonly property bool themed: root.name.startsWith("image://icon/")
+    // Flatten the icon to the bar foreground (alpha preserved). Whether it is
+    // appropriate for this icon (theme vs app pixmap) is decided by the caller.
+    property bool colorize: false
 
     // True once the icon rendered successfully
     readonly property bool resolved: iconImage.status === Image.Ready
@@ -46,10 +46,10 @@ Item {
         sourceSize.height: Math.ceil(root.iconSize * Screen.devicePixelRatio)
         source: root.name
 
-        // Paint monochrome theme icons with the bar foreground. Only enabled
-        // for themed icons (and when `recolor` is on), so app-supplied pixmaps
-        // keep their own colors and the layer cost can be opted out.
-        layer.enabled: root.themed && root.recolor
+        // Paint the icon with the bar foreground. The layer (FBO + one shader
+        // pass) only exists when colorizing, so non-tinted sources render at
+        // their base cost.
+        layer.enabled: root.colorize
         layer.effect: MultiEffect {
             colorization: 1.0
             colorizationColor: Theme.fgBarColor

@@ -97,6 +97,16 @@ PanelWindow {
         ? WlrKeyboardFocus.Exclusive
         : WlrKeyboardFocus.OnDemand
 
+    // Compositor blur behind the popup (colors.blur, ext-background-effect-v1),
+    // matching the rounded popup background; `null` removes it on toggle.
+    BackgroundEffect.blurRegion: Theme.blur ? blurRegion : null
+
+    Region {
+        id: blurRegion
+        item: popup.contentItem
+        radius: Theme.popupRadius
+    }
+
     visible: false
     color: "transparent"
     implicitWidth: popupWidth

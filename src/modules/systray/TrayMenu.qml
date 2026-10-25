@@ -73,6 +73,16 @@ PanelWindow {
     // focus (replacing PopupWindow's grabFocus, which layer surfaces lack).
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
+    // Compositor blur behind the menu (colors.blur, ext-background-effect-v1),
+    // same treatment as the bar popups it mirrors.
+    BackgroundEffect.blurRegion: Theme.blur ? blurRegion : null
+
+    Region {
+        id: blurRegion
+        item: root.contentItem
+        radius: Theme.popupRadius
+    }
+
     color: "transparent"
     visible: false
 

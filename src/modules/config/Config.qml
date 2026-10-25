@@ -104,7 +104,11 @@ Singleton {
           urgencyCritical: "#f85149",
           popupBorder: "#3d444db3",
           popupRadius: 13,
-          popupBorderWidth: 1
+          popupBorderWidth: 1,
+          // Compositor background blur (ext-background-effect-v1) behind the
+          // bar and popups. Requires a compositor implementing the protocol;
+          // without one the surfaces simply stay unblurred.
+          blur: false
         },
         modules: {
             workspaces:   { outputs: ["primary"] },

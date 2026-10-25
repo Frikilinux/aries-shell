@@ -54,6 +54,11 @@ Singleton {
     readonly property int popupRadius: Config.settings.colors.popupRadius
     readonly property int popupBorderWidth: Config.settings.colors.popupBorderWidth
 
+    // Compositor blur behind the bar/popups (colors.blur,
+    // ext-background-effect-v1). Off by default and a no-op on compositors
+    // without the protocol.
+    readonly property bool blur: Config.settings.colors.blur
+
     // Border color for a notification urgency (NotificationUrgency: 0=Low,
     // 1=Normal, 2=Critical). Kept here so every notification surface shares it.
     function urgencyColor(u) {

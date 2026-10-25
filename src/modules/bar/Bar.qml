@@ -36,6 +36,13 @@ PanelWindow {
         ? WlrKeyboardFocus.OnDemand
         : WlrKeyboardFocus.None
 
+    // Compositor blur behind the bar (colors.blur, ext-background-effect-v1).
+    // `null` removes the blur, so the toggle live-updates on config re-apply.
+    // Uses the full window geometry: the bar is a plain rect (no rounding).
+    BackgroundEffect.blurRegion: Theme.blur ? blurRegion : null
+
+    Region { id: blurRegion; item: bar.contentItem }
+
     // Zones where modules are added (from shell.qml or any Bar instance)
     property alias left: leftRow.data
     property alias center: centerRow.data

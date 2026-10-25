@@ -59,6 +59,15 @@ PanelWindow {
     // like the mpris app icon). Empty by default.
     property alias overlay: overlayLayer.data
 
+    // Content scroll state, for modules that render scroll hints in `overlay`:
+    // whether the content column exceeds maxContentHeight (and thus the flick
+    // scrolls) and where the flick currently sits. `flick` is aliased for
+    // click-to-scroll (flick(0, ±dy)).
+    readonly property bool contentScrolls: flick.contentHeight > flick.height + 1
+    readonly property bool scrollAtTop: flick.atYBeginning
+    readonly property bool scrollAtBottom: flick.atYEnd
+    property alias contentFlick: flick
+
     // Width available to the content column
     readonly property real contentWidth: column.width
 

@@ -16,6 +16,8 @@ import Quickshell.Io
 // `settings` holds the merged, canonical runtime object. QML bindings read
 // values through it (e.g. `Config.settings.modules.clock.timeFormat`), so any
 // re-apply (Config.read/save/update) live-updates every bound widget.
+// The `bar` section also carries the shared window appearance (blur), read by
+// Theme + bindings as `Config.settings.bar.<key>`.
 Singleton {
     id: root
 
@@ -75,7 +77,11 @@ Singleton {
         bar: {
             height: 30,
             spacing: 10,
-            reloadOnChange: true
+            reloadOnChange: true,
+            // Compositor background blur (ext-background-effect-v1) behind the
+            // bar and popups. Requires a compositor implementing the protocol;
+            // without one the surfaces simply stay unblurred.
+            blur: false
         },
         font: {
             family: "SF Compact Display",
@@ -104,11 +110,7 @@ Singleton {
           urgencyCritical: "#f85149",
           popupBorder: "#3d444db3",
           popupRadius: 13,
-          popupBorderWidth: 1,
-          // Compositor background blur (ext-background-effect-v1) behind the
-          // bar and popups. Requires a compositor implementing the protocol;
-          // without one the surfaces simply stay unblurred.
-          blur: false
+          popupBorderWidth: 1
         },
         modules: {
             workspaces:   { outputs: ["primary"] },

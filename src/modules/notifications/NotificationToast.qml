@@ -58,6 +58,17 @@ PanelWindow {
     // Purely informational: never takes keyboard focus.
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
+    // Compositor blur behind the toast block (`bar.blur`,
+    // ext-background-effect-v1), same treatment as the bar popups: rounded
+    // region matching the block radius, `null` when off.
+    BackgroundEffect.blurRegion: Theme.blur ? blurRegion : null
+
+    Region {
+        id: blurRegion
+        item: toast.contentItem
+        radius: toast.panelRadius
+    }
+
     implicitWidth: toast.toastWidth
     implicitHeight: Math.min(stack.implicitHeight + toast.edgeMargin * 2, toast.maxHeight)
 

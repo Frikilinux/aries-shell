@@ -24,7 +24,7 @@ Item {
     property int animationTime: 0
 
     implicitWidth: root.contentWidth + root.hPadding * 2 + Theme.iconInset * 2
-    implicitHeight: root.contentHeight
+    implicitHeight: root.contentHeight + Theme.iconInset
     width: implicitWidth
     height: implicitHeight
 
@@ -39,7 +39,11 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: height / 2
+        // The icon side-bearing inset stays transparent: it aligns the pill
+        // edge with the ink edge of bare icon modules (see Theme.iconInset).
+        anchors.leftMargin: Theme.iconInset
+        anchors.rightMargin: Theme.iconInset
+        radius: height / 3
         color: root.fillColor
         opacity: root.fillOpacity
         border.width: root.borderWidth

@@ -25,7 +25,7 @@ Item {
     // Pill: icons row + `Theme.pillPadding` padding per side; height fits the icons.
     readonly property int animationTime: Config.settings.bar.animation
     implicitWidth: privacy.any ? row.implicitWidth + Theme.pillPadding * 2 + Theme.iconInset * 2 : 1
-    implicitHeight: privacy.any ? Math.max(row.implicitHeight, 22) : 1
+    implicitHeight: privacy.any ? row.implicitHeight + Theme.pillPadding * 2 : 1
 
     // Module is visible only while something is captured and if outputs is
     // unset, matches this output, or contains it.
@@ -38,7 +38,7 @@ Item {
         id: container
         anchors.centerIn: parent
         width: row.implicitWidth + Theme.pillPadding * 2
-        height: Math.max(row.implicitHeight, 22)
+        height: row.implicitHeight + Theme.pillPadding * 2
         radius: height / 2
         visible: privacy.any
         color: Theme.bgPrivacy

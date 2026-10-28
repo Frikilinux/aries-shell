@@ -30,7 +30,7 @@ Item {
     readonly property int animationTime: Config.settings.bar.animation
 
     implicitWidth: notifications.counted ? container.width + Theme.iconInset * 2 : indicator.implicitWidth
-    implicitHeight: notifications.counted ? Math.max(indicator.implicitHeight, countText.implicitHeight, 22) : Math.max(indicator.implicitHeight, 1)
+    implicitHeight: notifications.counted ? container.height : Math.max(indicator.implicitHeight, 1)
 
     // Module is visible only if outputs property is unset, matches this output, or contains it
     visible: (notifications.counted || notifications.dndOn) && (!outputs || (Array.isArray(outputs) ? outputs.includes(output) : outputs === output))
@@ -45,7 +45,7 @@ Item {
         id: container
         anchors.centerIn: parent
         width: indicator.implicitWidth + countText.implicitWidth + Theme.innerGap + Theme.pillPadding * 2
-        height: Math.max(indicator.implicitHeight, countText.implicitHeight, 22)
+        height: Math.max(indicator.implicitHeight, countText.implicitHeight) + Theme.pillPadding * 2
         radius: height / 2
         visible: notifications.counted
         color: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder

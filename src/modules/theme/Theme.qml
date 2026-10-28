@@ -23,6 +23,14 @@ Singleton {
 
     // Uniform gap between bar modules and between the icons inside a module
     readonly property int spacing: Config.settings.bar.spacing
+    // Gap between the elements *inside* a module (icon<->text, icon<->icon).
+    // Half the module spacing: inner gaps must read tighter than the gap
+    // between modules or every module dissolves into its parts.
+    readonly property int innerGap: Math.max(4, Math.round(spacing / 2))
+    // Padding for modules that draw a filled pill around their content
+    // (notifications, privacy): same as innerGap, so the pill edge sits
+    // closer to its own content than to the neighbour module.
+    readonly property int pillPadding: innerGap
 
     // Colors theme for the bar and modules (from the user config)
     readonly property color bgBarColor: Config.settings.colors.bgBarColor

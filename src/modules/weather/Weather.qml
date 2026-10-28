@@ -11,8 +11,6 @@ Item {
     // The output being rendered.
     property string output: ""
 
-    readonly property int spacing: Theme.spacing
-
     // The popup window, exposed for shell.qml.
     property alias popup: popupWindow
 
@@ -35,7 +33,7 @@ Item {
     Text {
         id: tempLabel
         anchors.left: indicator.right
-        anchors.leftMargin: 4
+        anchors.leftMargin: Theme.innerGap
         anchors.verticalCenter: parent.verticalCenter
         visible: WeatherService.available
         text: WeatherService.temp + "°"

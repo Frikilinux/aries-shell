@@ -29,7 +29,7 @@ Item {
     readonly property bool counted: notifications.unread > 0
     readonly property int animationTime: Config.settings.bar.animation
 
-    implicitWidth: notifications.counted ? indicator.implicitWidth + countText.implicitWidth + 5 + Theme.spacing * 2 : indicator.implicitWidth
+    implicitWidth: notifications.counted ? indicator.implicitWidth + countText.implicitWidth + Theme.innerGap + Theme.pillPadding * 2 : indicator.implicitWidth
     implicitHeight: notifications.counted ? Math.max(indicator.implicitHeight, countText.implicitHeight, 22) : Math.max(indicator.implicitHeight, 1)
 
     // Module is visible only if outputs property is unset, matches this output, or contains it
@@ -60,7 +60,7 @@ Item {
     Icon {
         id: indicator
         anchors.left: parent.left
-        anchors.leftMargin: notifications.counted ? Theme.spacing : 0
+        anchors.leftMargin: notifications.counted ? Theme.pillPadding : 0
         anchors.verticalCenter: parent.verticalCenter
         // bell-urgent for unread critical, bell-off while DND is on, bell otherwise
         glyph: notifications.critical ? "\ue07b" : (notifications.dndOn ? "\ue07a" : (notifications.unread ? "\ue07c" : ""))
@@ -72,7 +72,7 @@ Item {
     Text {
         id: countText
         anchors.left: indicator.right
-        anchors.leftMargin: 5
+        anchors.leftMargin: Theme.innerGap
         anchors.verticalCenter: parent.verticalCenter
         visible: notifications.counted
         text: notifications.unread > 99 ? "99+" : String(notifications.unread)

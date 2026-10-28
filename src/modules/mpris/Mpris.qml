@@ -54,7 +54,7 @@ Item {
         id: trackRow
         visible: mpris.hasPlayer
         opacity: mpris.isPlaying ? 1 : 0.5
-        spacing: 7
+        spacing: Theme.innerGap
         anchors.verticalCenter: parent.verticalCenter
 
         Text {

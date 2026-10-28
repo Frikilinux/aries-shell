@@ -51,7 +51,7 @@ Item {
 
     Row {
         id: row
-        spacing: Theme.spacing
+        spacing: Theme.innerGap
 
         // Ethernet icon + VPN shield badge (only while the link is connected).
         Item {

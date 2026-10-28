@@ -44,6 +44,8 @@ Item {
 
     Row {
         id: row
+        // +4: tray pixmaps usually carry transparent padding around the glyph;
+        // without the extra gap tray icons sit tighter than bar icons.
         spacing: Math.round(systray.spacing + 4)
 
         Repeater {

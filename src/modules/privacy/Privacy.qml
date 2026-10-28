@@ -22,9 +22,9 @@ Item {
     // Number of icons shown (the pill width derives from it via the Row).
     readonly property int iconCount: (privacy.mic ? 1 : 0) + (privacy.share ? 1 : 0)
 
-    // Pill: icons row + `bar.spacing` padding per side; height fits the icons.
+    // Pill: icons row + `Theme.pillPadding` padding per side; height fits the icons.
     readonly property int animationTime: Config.settings.bar.animation
-    implicitWidth: privacy.any ? row.implicitWidth + Theme.spacing * 2 : 1
+    implicitWidth: privacy.any ? row.implicitWidth + Theme.pillPadding * 2 : 1
     implicitHeight: privacy.any ? Math.max(row.implicitHeight, 22) : 1
 
     // Module is visible only while something is captured and if outputs is
@@ -37,7 +37,7 @@ Item {
     Rectangle {
         id: container
         anchors.centerIn: parent
-        width: row.implicitWidth + Theme.spacing * 2
+        width: row.implicitWidth + Theme.pillPadding * 2
         height: Math.max(row.implicitHeight, 22)
         radius: height / 2
         visible: privacy.any
@@ -55,7 +55,7 @@ Item {
     Row {
         id: row
         anchors.centerIn: parent
-        spacing: 7
+        spacing: Theme.innerGap
 
         // Microphone in use.
         Icon {

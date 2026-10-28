@@ -34,7 +34,7 @@ Item {
     Item {
         id: content
 
-        implicitWidth: tempValue.implicitWidth + 4 + tempIcon.implicitWidth
+        implicitWidth: tempValue.implicitWidth + Theme.innerGap + tempIcon.implicitWidth
         implicitHeight: Math.max(tempIcon.implicitHeight, tempValue.implicitHeight)
 
         Icon {
@@ -49,7 +49,7 @@ Item {
         Text {
             id: tempValue
             anchors.left: tempIcon.right
-            anchors.leftMargin: 2
+            anchors.leftMargin: Theme.innerGap
             anchors.verticalCenter: parent.verticalCenter
             text: sysInfo.hasTemperature ? Math.round(sysInfo.temperature) + "\u00b0" : "\u2014"
             color: sysInfo.stateColor

@@ -26,9 +26,9 @@ Singleton {
     // Gap between the elements *inside* a module (icon<->text, icon<->icon).
     // Half the module spacing: inner gaps must read tighter than the gap
     // between modules or every module dissolves into its parts.
-    readonly property int innerGap: Math.max(4, Math.round(spacing / 2))
+    readonly property int innerGap: Math.max(7, Math.round(spacing / 2))
     // Padding between a pill's content and its edges (notifications, privacy).
-    readonly property int pillPadding: 4
+    readonly property int pillPadding: 10
     // Bar glyphs are ink-centred inside a full-em advance (advance == upm),
     // so every icon carries transparent side bearings: 0% (battery) up to
     // 25% (bluetooth) of the em, ~12% on average (~2px at iconSize 18).

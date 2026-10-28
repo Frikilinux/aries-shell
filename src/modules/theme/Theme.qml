@@ -54,6 +54,10 @@ Singleton {
     readonly property int popupRadius: Config.settings.colors.popupRadius
     readonly property int popupBorderWidth: Config.settings.colors.popupBorderWidth
 
+    // Privacy indicator appearance
+    readonly property color bgPrivacy: Config.settings.colors.bgPrivacy
+    readonly property color fgPrivacy: Config.settings.colors.fgBarColor
+
     // Compositor blur behind the bar/popups (`bar.blur`,
     // ext-background-effect-v1). Off by default and a no-op on compositors
     // without the protocol.
@@ -63,10 +67,10 @@ Singleton {
     // 1=Normal, 2=Critical). Kept here so every notification surface shares it.
     function urgencyColor(u) {
         if (u === 0)
-            return urgencyLowColor
+            return urgencyLowColor;
         if (u === 2)
-            return urgencyCriticalColor
-        return urgencyNormalColor
+            return urgencyCriticalColor;
+        return urgencyNormalColor;
     }
 
     // CPU temperature color (sysinfo): normal color below the warning
@@ -74,13 +78,12 @@ Singleton {
     // the bar (fgBarColor) and popups (fgColor).
     function temperatureColor(temp, normal) {
         if (temp < 0)
-            return normal
-        const t = Config.settings.modules.sysinfo
+            return normal;
+        const t = Config.settings.modules.sysinfo;
         if (temp >= t.critTemp)
-            return peakColor
+            return peakColor;
         if (temp >= t.warnTemp)
-            return urgentColor
-        return normal
+            return urgentColor;
+        return normal;
     }
-
 }

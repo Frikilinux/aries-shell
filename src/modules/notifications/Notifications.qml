@@ -1,6 +1,7 @@
 import QtQuick
 import "../theme"
 import "../icon"
+import "../config"
 
 // Bar indicator: shows the unread notification count and opens the history
 // popup on click. Middle-click toggles Do-Not-Disturb. While DND is on the icon
@@ -26,8 +27,9 @@ Item {
     // The pill only appears while there is an unread count to show; with DND on
     // and nothing unread the module shows the bare dimmed bell-off icon.
     readonly property bool counted: notifications.unread > 0
+    readonly property int animationTime: Config.settings.bar.animation
 
-    implicitWidth: notifications.counted ? indicator.implicitWidth + countText.implicitWidth + 5 + 20 : indicator.implicitWidth
+    implicitWidth: notifications.counted ? indicator.implicitWidth + countText.implicitWidth + 5 + Theme.spacing * 2 : indicator.implicitWidth
     implicitHeight: notifications.counted ? Math.max(indicator.implicitHeight, countText.implicitHeight, 22) : Math.max(indicator.implicitHeight, 1)
 
     // Module is visible only if outputs property is unset, matches this output, or contains it
@@ -36,7 +38,7 @@ Item {
     // Pill container (background layer) behind the icon + count pair. Same
     // palette as the Chip widget: subtle button background + border.
     // Shown only while there is an unread count. Fills the module: the size
-    // comes from the root's implicit width/height (10px padding per side).
+    // comes from the root's implicit width/height (`bar.spacing` per side).
     Rectangle {
         id: container
         anchors.fill: parent
@@ -48,12 +50,17 @@ Item {
         border.color: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
         // border.color:
         // border.color: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
+        Behavior on width {
+            NumberAnimation {
+                duration: notifications.animationTime
+            }
+        }
     }
 
     Icon {
         id: indicator
         anchors.left: parent.left
-        anchors.leftMargin: notifications.counted ? 10 : 0
+        anchors.leftMargin: notifications.counted ? Theme.spacing : 0
         anchors.verticalCenter: parent.verticalCenter
         // bell-urgent for unread critical, bell-off while DND is on, bell otherwise
         glyph: notifications.critical ? "\ue07b" : (notifications.dndOn ? "\ue07a" : (notifications.unread ? "\ue07c" : ""))

@@ -35,38 +35,36 @@ Singleton {
     // First arg of outputs() must be `root.revision`: it makes the shell's
     // `outputs:` bindings re-evaluate every time the config is (re)applied.
     function outputs(revision, moduleName, screenName) {
-        const o = root.settings.modules[moduleName].outputs
-        if (o === undefined || o === null || o === "*"
-            || (Array.isArray(o) && o.indexOf("*") !== -1))
-            return undefined                       // all screens
-        const list = Array.isArray(o) ? o : [o]
+        const o = root.settings.modules[moduleName].outputs;
+        if (o === undefined || o === null || o === "*" || (Array.isArray(o) && o.indexOf("*") !== -1))
+            return undefined;                       // all screens
+        const list = Array.isArray(o) ? o : [o];
         if (list.length === 0)
-            return list
-        if (list.includes(screenName)
-            || (list.includes("primary") && screenName === root.primaryScreen))
-            return [screenName]
-        return []
+            return list;
+        if (list.includes(screenName) || (list.includes("primary") && screenName === root.primaryScreen))
+            return [screenName];
+        return [];
     }
 
     // Screen with the global origin (0,0) is treated as the primary monitor;
     // falls back to the first screen when no output sits at the origin.
     readonly property string primaryScreen: {
-        const screens = Quickshell.screens
+        const screens = Quickshell.screens;
         for (let i = 0; i < screens.length; i++) {
             if (screens[i].x === 0 && screens[i].y === 0)
-                return screens[i].name
+                return screens[i].name;
         }
-        return screens.length > 0 ? screens[0].name : ""
+        return screens.length > 0 ? screens[0].name : "";
     }
 
     // ------------------------------------------------------------------
     // Config file location
     // ------------------------------------------------------------------
     readonly property string configDir: {
-        const xdg = Quickshell.env("XDG_CONFIG_HOME")
-        const home = Quickshell.env("HOME")
-        const base = xdg ? ("" + xdg) : ((home ? "" + home : "") + "/.config")
-        return base + "/aries"
+        const xdg = Quickshell.env("XDG_CONFIG_HOME");
+        const home = Quickshell.env("HOME");
+        const base = xdg ? ("" + xdg) : ((home ? "" + home : "") + "/.config");
+        return base + "/aries";
     }
     readonly property string configPath: root.configDir + "/config.json"
 
@@ -74,89 +72,158 @@ Singleton {
     // Defaults (also the first-run contents of the user's config file)
     // ------------------------------------------------------------------
     readonly property var defaults: ({
-        bar: {
-            height: 30,
-            spacing: 10,
-            reloadOnChange: true,
-            // Compositor background blur (ext-background-effect-v1) behind the
-            // bar and popups. Requires a compositor implementing the protocol;
-            // without one the surfaces simply stay unblurred.
-            blur: false
-        },
-        font: {
-            family: "SF Compact Display",
-            styleName: "Regular",
-            size: 17
-        },
-        colors: {
-          fgBarColor: "#9198a1",
-          bgBarColor: "#151b23",
-          bgColor: "#212830",
-          bgColorMuted: "#262c36",
-          overlayBgColor: "#2a313c",
-          bgOpacity: 0.9,
-          fgColor: "#d1d7e0",
-          fgColorMuted: "#9198a1",
-          buttonPrimaryBgColor: "#347d39",
-          buttonChipBgColor: "#76b9002e",
-          buttonBgColor: "#2a313c",
-          buttonBorder: "#3d444db3",
-          accent: "#478be6",
-          urgent: "#e0af68",
-          offPeak: "#3fb950",
-          peak: "#f85149",
-          urgencyLow: "#9198a1",
-          urgencyNormal: "#478be6",
-          urgencyCritical: "#f85149",
-          popupBorder: "#3d444db3",
-          popupRadius: 13,
-          popupBorderWidth: 1
-        },
-        modules: {
-            workspaces:   { outputs: ["primary"] },
-            activeWindow: { outputs: ["primary"], maxLabelWidth: 200, appNames: {} },
-            mpris:        { outputs: ["primary"], maxLabelWidth: 180 },
-            systray:      { outputs: ["primary"], recolor: true,
-                            recolorPixmaps: false,
-                            pixmapsNoRecolor: [] },
-            bluetooth:    { outputs: ["primary"], deviceIcons: {} },
-            network:      { outputs: ["primary"] },
-            volume:       { outputs: ["primary"], scrollStep: 0.03, naturalScroll: true,
-                            osd: { enabled: true, timeout: 1500, x: "center", y: "center" } },
-            battery:      { outputs: ["primary"], lowThreshold: 20 },
-            sysinfo:      { outputs: ["primary"], warnTemp: 75, critTemp: 90,
-                            pollMs: 1000, idlePollMs: 5000, history: 90 },
-            clock:        { outputs: ["primary"], timeFormat: "HH:mm", showDate: true },
-            notifications:{ outputs: ["primary"],
-                            maxVisible: 4,
-                            maxHistory: 100,
-                            persist: true,
-                            dnd: false,
-                            position: { x: 6, y: 36 },
-                            timeout: { low: 4000, normal: 6000, critical: 0 } },
-            weather:      { outputs: ["primary"],
-                            apiKey: "",
-                            apiKeyDaily: "",
-                            latitude: "+45.5",
-                            longitude: "-122.6",
-                            units: "metric" },
-            power:        { outputs: ["primary"] },
-            offpeak:      { outputs: ["primary"] },
-            launcher:     { outputs: ["primary"],
-                            terminal: Quickshell.env("TERMINAL") || "" },
-            polkit:       { outputs: "*", x: "center", y: "center" },
-            wallpaper:    { outputs: "*",
-                            path: "",
-                            fillMode: "crop",
-                            position: "center",
-                            dim: 0.0 },
-            rss:          { outputs: ["primary"],
-                            feeds: [],
-                            refreshInterval: 60,
-                            maxAgeDays: 15,
-                            maxPerFeed: 4 }
-        }
-    })
+            bar: {
+                height: 30,
+                spacing: 10,
+                reloadOnChange: true,
+                // Compositor background blur (ext-background-effect-v1) behind the
+                // bar and popups. Requires a compositor implementing the protocol;
+                // without one the surfaces simply stay unblurred.
+                blur: false,
+                animation: 100
+            },
+            font: {
+                family: "SF Compact Display",
+                styleName: "Regular",
+                size: 17
+            },
+            colors: {
+                fgBarColor: "#9198a1",
+                bgBarColor: "#151b23",
+                bgColor: "#212830",
+                bgColorMuted: "#262c36",
+                overlayBgColor: "#2a313c",
+                bgOpacity: 0.9,
+                fgColor: "#d1d7e0",
+                fgColorMuted: "#9198a1",
+                buttonPrimaryBgColor: "#347d39",
+                buttonChipBgColor: "#76b9002e",
+                buttonBgColor: "#2a313c",
+                buttonBorder: "#3d444db3",
+                accent: "#478be6",
+                urgent: "#e0af68",
+                offPeak: "#3fb950",
+                peak: "#f85149",
+                urgencyLow: "#9198a1",
+                urgencyNormal: "#478be6",
+                urgencyCritical: "#f85149",
+                popupBorder: "#3d444db3",
+                bgPrivacy: "#8256d0",
+                popupRadius: 13,
+                popupBorderWidth: 1
+            },
+            modules: {
+                workspaces: {
+                    outputs: ["primary"]
+                },
+                activeWindow: {
+                    outputs: ["primary"],
+                    maxLabelWidth: 200,
+                    appNames: {}
+                },
+                mpris: {
+                    outputs: ["primary"],
+                    maxLabelWidth: 180
+                },
+                systray: {
+                    outputs: ["primary"],
+                    recolor: true,
+                    recolorPixmaps: false,
+                    pixmapsNoRecolor: []
+                },
+                bluetooth: {
+                    outputs: ["primary"],
+                    deviceIcons: {}
+                },
+                network: {
+                    outputs: ["primary"]
+                },
+                volume: {
+                    outputs: ["primary"],
+                    scrollStep: 0.03,
+                    naturalScroll: true,
+                    osd: {
+                        enabled: true,
+                        timeout: 1500,
+                        x: "center",
+                        y: "center"
+                    }
+                },
+                battery: {
+                    outputs: ["primary"],
+                    lowThreshold: 20
+                },
+                sysinfo: {
+                    outputs: ["primary"],
+                    warnTemp: 75,
+                    critTemp: 90,
+                    pollMs: 1000,
+                    idlePollMs: 5000,
+                    history: 90
+                },
+                clock: {
+                    outputs: ["primary"],
+                    timeFormat: "HH:mm",
+                    showDate: true
+                },
+                notifications: {
+                    outputs: ["primary"],
+                    maxVisible: 4,
+                    maxHistory: 100,
+                    persist: true,
+                    dnd: false,
+                    position: {
+                        x: 6,
+                        y: 36
+                    },
+                    timeout: {
+                        low: 4000,
+                        normal: 6000,
+                        critical: 0
+                    }
+                },
+                weather: {
+                    outputs: ["primary"],
+                    apiKey: "",
+                    apiKeyDaily: "",
+                    latitude: "+45.5",
+                    longitude: "-122.6",
+                    units: "metric"
+                },
+                power: {
+                    outputs: ["primary"]
+                },
+                offpeak: {
+                    outputs: ["primary"]
+                },
+                launcher: {
+                    outputs: ["primary"],
+                    terminal: Quickshell.env("TERMINAL") || ""
+                },
+                polkit: {
+                    outputs: "*",
+                    x: "center",
+                    y: "center"
+                },
+                wallpaper: {
+                    outputs: "*",
+                    path: "",
+                    fillMode: "crop",
+                    position: "center",
+                    dim: 0.0
+                },
+                rss: {
+                    outputs: ["primary"],
+                    feeds: [],
+                    refreshInterval: 60,
+                    maxAgeDays: 15,
+                    maxPerFeed: 4
+                },
+                privacy: {
+                    outputs: ["primary"]
+                }
+            }
+        })
 
     readonly property string defaultText: JSON.stringify(root.defaults, null, 4)
 
@@ -174,34 +241,37 @@ Singleton {
     // as unknown keys.
     function merge(base, over, additive) {
         if (over === undefined || over === null || typeof over !== "object")
-            return over
-        const out = {}
+            return over;
+        const out = {};
         for (const k in base) {
-            const b = base[k]
-            const o = over[k]
+            const b = base[k];
+            const o = over[k];
             if (additive !== undefined && k in additive) {
-                const map = (o === undefined || o === null || typeof o !== "object") ? {} : o
-                out[k] = {}
+                const map = (o === undefined || o === null || typeof o !== "object") ? {} : o;
+                out[k] = {};
                 for (const bk in b)
-                    out[k][bk] = b[bk]
+                    out[k][bk] = b[bk];
                 for (const ok in map)
-                    out[k][ok] = map[ok]
+                    out[k][ok] = map[ok];
             } else if (b !== null && typeof b === "object" && !Array.isArray(b)) {
-                out[k] = o === undefined ? b : root.merge(b, o, additive)
+                out[k] = o === undefined ? b : root.merge(b, o, additive);
             } else {
-                out[k] = o === undefined ? b : o
+                out[k] = o === undefined ? b : o;
             }
         }
-        return out
+        return out;
     }
 
     // Replace the canonical settings with a (re)merge, then wake up the bound
     // widgets via `revision`. Also called after save()/update() to refresh.
     function apply(over) {
-        root.settings = over === undefined ? root.defaults : root.merge(root.defaults, over, { appNames: true, deviceIcons: true })
-        root.ready = true
-        root.revision++
-        root.syncWatch()
+        root.settings = over === undefined ? root.defaults : root.merge(root.defaults, over, {
+            appNames: true,
+            deviceIcons: true
+        });
+        root.ready = true;
+        root.revision++;
+        root.syncWatch();
     }
 
     // Give the FileView its config path once the file exists (the watcher can't
@@ -209,23 +279,23 @@ Singleton {
     // FileView ignores repeated identical path assignments.
     function syncWatch() {
         if (!fileWatch || fileWatch.path === root.configPath)
-            return
-        fileWatch.path = root.configPath
+            return;
+        fileWatch.path = root.configPath;
     }
 
     function parseConfig(text) {
-        root.lastRaw = text
+        root.lastRaw = text;
         try {
-            const data = JSON.parse(text)
-            root.loadError = ""
-            root.apply(data)
+            const data = JSON.parse(text);
+            root.loadError = "";
+            root.apply(data);
         } catch (e) {
-            root.loadError = "config: invalid JSON at " + root.configPath
+            root.loadError = "config: invalid JSON at " + root.configPath;
             if (root.ready) {
                 // Keep the last good settings during a transient edit (the
                 // editor writes in two steps); only the first boot falls back.
             } else {
-                root.apply(root.defaults)
+                root.apply(root.defaults);
             }
         }
     }
@@ -241,58 +311,57 @@ Singleton {
     // turn it back on just by editing the file).
     function onFileLoaded() {
         if (!root.ready)
-            return
-        const text = fileWatch.text()
+            return;
+        const text = fileWatch.text();
         if (text === "" || text === root.lastRaw)
-            return
+            return;
         if (root.settings.bar.reloadOnChange === false) {
-            let enables = false
-            try { enables = JSON.parse(text).bar.reloadOnChange !== false } catch (e) {}
+            let enables = false;
+            try {
+                enables = JSON.parse(text).bar.reloadOnChange !== false;
+            } catch (e) {}
             if (!enables)
-                return
+                return;
         }
-        root.parseConfig(text)
+        root.parseConfig(text);
     }
 
     // Create directory + file if missing, then read the contents.
     function load() {
-        root.loadError = ""
-        boot.command = ["/bin/sh", "-c",
-            "d=\"$1\"; f=\"$2\"; mkdir -p \"$d\"; "
-                + "[ -f \"$f\" ] || printf '%s' \"$3\" > \"$f\"; cat \"$f\"",
-            "sh", root.configDir, root.configPath, root.defaultText]
-        boot.running = true
+        root.loadError = "";
+        boot.command = ["/bin/sh", "-c", "d=\"$1\"; f=\"$2\"; mkdir -p \"$d\"; " + "[ -f \"$f\" ] || printf '%s' \"$3\" > \"$f\"; cat \"$f\"", "sh", root.configDir, root.configPath, root.defaultText];
+        boot.running = true;
     }
 
     // Re-read the file from disk and re-apply (used by the future settings UI).
     function reload() {
-        root.load()
+        root.load();
     }
 
     // Mutate a module's setting and re-apply so bindings update live.
     function setModule(moduleName, key, value) {
-        root.update(s => { s.modules[moduleName][key] = value })
+        root.update(s => {
+            s.modules[moduleName][key] = value;
+        });
     }
 
     // Mutate the canonical settings through a callback, then re-apply.
     function update(callback) {
-        const next = JSON.parse(JSON.stringify(root.settings))
-        callback(next)
-        root.apply(next)
+        const next = JSON.parse(JSON.stringify(root.settings));
+        callback(next);
+        root.apply(next);
     }
 
     // Persist the current canonical settings to disk.
     function save() {
-        const text = JSON.stringify(root.settings, null, 4)
-        root.lastRaw = text
-        saveProcess.command = ["/bin/sh", "-c",
-            "d=\"$1\"; f=\"$2\"; mkdir -p \"$d\"; printf '%s' \"$3\" > \"$f\"",
-            "sh", root.configDir, root.configPath, text]
-        saveProcess.running = true
+        const text = JSON.stringify(root.settings, null, 4);
+        root.lastRaw = text;
+        saveProcess.command = ["/bin/sh", "-c", "d=\"$1\"; f=\"$2\"; mkdir -p \"$d\"; printf '%s' \"$3\" > \"$f\"", "sh", root.configDir, root.configPath, text];
+        saveProcess.running = true;
     }
 
     Component.onCompleted: {
-        root.load()
+        root.load();
     }
 
     // Watches the config file (inotify underneath) so external edits re-apply
@@ -313,7 +382,7 @@ Singleton {
         }
         onExited: function (exitCode, exitStatus) {
             if (!root.ready)
-                root.apply(root.defaults)
+                root.apply(root.defaults);
         }
     }
 

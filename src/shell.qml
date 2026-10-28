@@ -33,6 +33,7 @@ import "modules/wallpaper"
 import "modules/launcher"
 import "modules/polkit"
 import "modules/rss"
+import "modules/privacy"
 
 ShellRoot {
     // The bar (one per screen). Built once the user config has been read so
@@ -68,6 +69,10 @@ ShellRoot {
                     }
 
                     right: [
+                        Privacy {
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "privacy", barRoot.modelData.name)
+                        },
                         Notifications {
                             output: barRoot.modelData.name
                             outputs: Config.outputs(Config.revision, "notifications", barRoot.modelData.name)

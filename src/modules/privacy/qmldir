@@ -1,0 +1,3 @@
+module modules.privacy
+singleton PrivacyService 1.0 PrivacyService.qml
+Privacy 1.0 Privacy.qml

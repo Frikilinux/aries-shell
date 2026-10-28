@@ -32,9 +32,22 @@ Singleton {
         root.historyPopups = root.historyPopups.filter(w => w !== win)
     }
 
-    // Popups whose bar module is actually shown on its output.
+    // Popups on outputs where the bar module lives. This mirrors the module's
+    // own `outputs` filter instead of testing `anchorItem.visible`: the module
+    // now hides itself whenever everything is read (no pill, no DND), and
+    // opening marks everything read, so a visibility-based filter would make
+    // `open`/`toggle` a no-op right after the first use.
+    function targetable(w) {
+        const a = w.anchorItem
+        if (!a)
+            return false
+        if (!a.outputs)
+            return true
+        return Array.isArray(a.outputs) ? a.outputs.includes(a.output) : a.outputs === a.output
+    }
+
     function targets() {
-        return root.historyPopups.filter(w => w.anchorItem && w.anchorItem.visible)
+        return root.historyPopups.filter(w => root.targetable(w))
     }
 
     function show() {

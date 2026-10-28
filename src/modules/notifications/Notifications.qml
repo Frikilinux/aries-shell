@@ -23,48 +23,59 @@ Item {
     // signal when toasts are suppressed (DND) or simply not looked at yet.
     readonly property bool critical: NotificationService.unreadCritical
 
-    // Icon only: the unread count rides on a badge overlaid on the corner.
-    implicitWidth: indicator.implicitWidth
-    implicitHeight: indicator.implicitHeight
+    // The pill only appears while there is an unread count to show; with DND on
+    // and nothing unread the module shows the bare dimmed bell-off icon.
+    readonly property bool counted: notifications.unread > 0
+
+    implicitWidth: notifications.counted ? indicator.implicitWidth + countText.implicitWidth + 5 + 20 : indicator.implicitWidth
+    implicitHeight: notifications.counted ? Math.max(indicator.implicitHeight, countText.implicitHeight, 22) : Math.max(indicator.implicitHeight, 1)
 
     // Module is visible only if outputs property is unset, matches this output, or contains it
-    visible: !outputs || (Array.isArray(outputs) ? outputs.includes(output) : outputs === output)
+    visible: (notifications.counted || notifications.dndOn) && (!outputs || (Array.isArray(outputs) ? outputs.includes(output) : outputs === output))
+
+    // Pill container (background layer) behind the icon + count pair. Same
+    // palette as the Chip widget: subtle button background + border.
+    // Shown only while there is an unread count. Fills the module: the size
+    // comes from the root's implicit width/height (10px padding per side).
+    Rectangle {
+        id: container
+        anchors.fill: parent
+        radius: height / 2
+        visible: notifications.counted
+        color: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
+        opacity: 0.4
+        border.width: 1
+        border.color: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
+        // border.color:
+        // border.color: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
+    }
 
     Icon {
         id: indicator
         anchors.left: parent.left
+        anchors.leftMargin: notifications.counted ? 10 : 0
         anchors.verticalCenter: parent.verticalCenter
         // bell-urgent for unread critical, bell-off while DND is on, bell otherwise
         glyph: notifications.critical ? "\ue07b" : (notifications.dndOn ? "\ue07a" : (notifications.unread ? "\ue07c" : ""))
-        color: notifications.critical ? Theme.urgencyCriticalColor : Theme.fgBarColor
-        opacity: (notifications.unread > 0 || notifications.dndOn) ? 1 : 0.6
+        color: Theme.fgBarColor
+        opacity: (notifications.counted || notifications.dndOn) ? 1 : 0.6
     }
 
-    // Unread count: circular badge pinned to the icon's top-left corner. It grows
-    // into a pill for multi-digit counts.
-    Rectangle {
-        id: badge
-        anchors.left: indicator.left
-        anchors.top: indicator.top
-        anchors.leftMargin: -3
-        anchors.topMargin: -3
-        width: Math.max(13, badgeText.implicitWidth + 6)
-        height: 13
-        radius: height / 2
-        visible: notifications.unread > 0
-        color: Theme.accentColor
-        border.color: Theme.bgBarColor
-
-        Text {
-            id: badgeText
-            anchors.centerIn: parent
-            text: notifications.unread > 99 ? "99+" : String(notifications.unread)
-            color: Theme.bgBarColor
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize - 8
-            font.bold: true
-            font.features: ({ "tnum": 1 })
-        }
+    // Unread count on the right side of the icon, inside the pill.
+    Text {
+        id: countText
+        anchors.left: indicator.right
+        anchors.leftMargin: 5
+        anchors.verticalCenter: parent.verticalCenter
+        visible: notifications.counted
+        text: notifications.unread > 99 ? "99+" : String(notifications.unread)
+        color: Theme.fgBarColor
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.fontSize - 4
+        font.bold: true
+        font.features: ({
+                "tnum": 1
+            })
     }
 
     MouseArea {
@@ -73,9 +84,9 @@ Item {
         cursorShape: Qt.PointingHandCursor
         onClicked: function (mouse) {
             if (mouse.button === Qt.MiddleButton)
-                NotificationService.toggleDnd()
+                NotificationService.toggleDnd();
             else
-                historyPopup.visible = !historyPopup.visible
+                historyPopup.visible = !historyPopup.visible;
         }
     }
 

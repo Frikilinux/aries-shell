@@ -1,3 +1,4 @@
 module modules.widgets
 Switch 1.0 Switch.qml
 Chip 1.0 Chip.qml
+Pill 1.0 Pill.qml

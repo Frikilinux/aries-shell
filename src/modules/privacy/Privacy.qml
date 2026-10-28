@@ -2,6 +2,7 @@ import QtQuick
 import "../theme"
 import "../icon"
 import "../config"
+import "../widgets"
 
 // Bar indicator for active privacy-sensitive captures (microphone / screen
 // share via Pipewire). Each active capture shows its icon; with no captures
@@ -24,32 +25,24 @@ Item {
 
     // Pill: icons row + `Theme.pillPadding` padding per side; height fits the icons.
     readonly property int animationTime: Config.settings.bar.animation
-    implicitWidth: privacy.any ? row.implicitWidth + Theme.pillPadding * 2 + Theme.iconInset * 2 : 1
-    implicitHeight: privacy.any ? row.implicitHeight + Theme.pillPadding * 2 : 1
+    implicitWidth: privacy.any ? container.width : 1
+    implicitHeight: privacy.any ? container.height : 1
 
     // Module is visible only while something is captured and if outputs is
     // unset, matches this output, or contains it.
     visible: privacy.any && (!outputs || (Array.isArray(outputs) ? outputs.includes(output) : outputs === output))
 
-    // Pill container behind the icons; same palette as the notifications pill
-    // (Chip colors), but plain button background — captures are shown with the
-    // critical urgency color as the "you are being watched" signal.
-    Rectangle {
+    // Pill behind the capture icons (see widgets/Pill.qml), same ink-edge
+    // alignment as the notifications pill.
+    Pill {
         id: container
         anchors.centerIn: parent
-        width: row.implicitWidth + Theme.pillPadding * 2
-        height: row.implicitHeight + Theme.pillPadding * 2
-        radius: height / 2
         visible: privacy.any
-        color: Theme.bgPrivacy
-        // border.width: 0
-        opacity: Theme.bgOpacity
-        // border.color: Theme.buttonBorder
-        Behavior on width {
-            NumberAnimation {
-                duration: privacy.animationTime
-            }
-        }
+        contentWidth: row.implicitWidth
+        contentHeight: row.implicitHeight
+        fillColor: Theme.bgPrivacy
+        fillOpacity: Theme.bgOpacity
+        animationTime: privacy.animationTime
     }
 
     Row {

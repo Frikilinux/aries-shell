@@ -2,6 +2,7 @@ import QtQuick
 import "../theme"
 import "../icon"
 import "../config"
+import "../widgets"
 
 // Bar indicator: shows the unread notification count and opens the history
 // popup on click. Middle-click toggles Do-Not-Disturb. While DND is on the icon
@@ -29,34 +30,27 @@ Item {
     readonly property bool counted: notifications.unread > 0
     readonly property int animationTime: Config.settings.bar.animation
 
-    implicitWidth: notifications.counted ? container.width + Theme.iconInset * 2 : indicator.implicitWidth
+    implicitWidth: notifications.counted ? container.width : indicator.implicitWidth
     implicitHeight: notifications.counted ? container.height : Math.max(indicator.implicitHeight, 1)
 
     // Module is visible only if outputs property is unset, matches this output, or contains it
     visible: (notifications.counted || notifications.dndOn) && (!outputs || (Array.isArray(outputs) ? outputs.includes(output) : outputs === output))
 
-    // Pill container (background layer) behind the icon + count pair. Same
-    // palette as the Chip widget: subtle button background + border.
-    // Shown only while there is an unread count. The root is wider than the
-    // pill by Theme.iconInset per side (icon side-bearing compensation, see
-    // Theme.qml), so the pill edge aligns with the ink edge of bare icons
-    // and the external gap to neighbours matches module-to-module spacing.
-    Rectangle {
+    // Pill behind the icon + count pair (see widgets/Pill.qml). Its edge is
+    // inset by Theme.iconInset per side so it aligns with the ink edge of
+    // bare icon modules and the external gap to neighbours matches
+    // module-to-module spacing.
+    Pill {
         id: container
         anchors.centerIn: parent
-        width: indicator.implicitWidth + countText.implicitWidth + Theme.innerGap + Theme.pillPadding * 2
-        height: Math.max(indicator.implicitHeight, countText.implicitHeight) + Theme.pillPadding * 2
-        radius: height / 2
         visible: notifications.counted
-        color: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
-        opacity: 0.4
-        border.width: 1
-        border.color: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
-        Behavior on width {
-            NumberAnimation {
-                duration: notifications.animationTime
-            }
-        }
+        contentWidth: indicator.implicitWidth + countText.implicitWidth + Theme.innerGap
+        contentHeight: Math.max(indicator.implicitHeight, countText.implicitHeight)
+        fillColor: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
+        fillOpacity: 0.4
+        borderColor: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
+        borderWidth: 1
+        animationTime: notifications.animationTime
     }
 
     Icon {

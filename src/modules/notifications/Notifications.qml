@@ -29,7 +29,7 @@ Item {
     readonly property bool counted: notifications.unread > 0
     readonly property int animationTime: Config.settings.bar.animation
 
-    implicitWidth: notifications.counted ? indicator.implicitWidth + countText.implicitWidth + Theme.innerGap + Theme.pillPadding * 2 : indicator.implicitWidth
+    implicitWidth: notifications.counted ? container.width + Theme.iconInset * 2 : indicator.implicitWidth
     implicitHeight: notifications.counted ? Math.max(indicator.implicitHeight, countText.implicitHeight, 22) : Math.max(indicator.implicitHeight, 1)
 
     // Module is visible only if outputs property is unset, matches this output, or contains it
@@ -37,19 +37,21 @@ Item {
 
     // Pill container (background layer) behind the icon + count pair. Same
     // palette as the Chip widget: subtle button background + border.
-    // Shown only while there is an unread count. Fills the module: the size
-    // comes from the root's implicit width/height (`bar.spacing` per side).
+    // Shown only while there is an unread count. The root is wider than the
+    // pill by Theme.iconInset per side (icon side-bearing compensation, see
+    // Theme.qml), so the pill edge aligns with the ink edge of bare icons
+    // and the external gap to neighbours matches module-to-module spacing.
     Rectangle {
         id: container
-        anchors.fill: parent
+        anchors.centerIn: parent
+        width: indicator.implicitWidth + countText.implicitWidth + Theme.innerGap + Theme.pillPadding * 2
+        height: Math.max(indicator.implicitHeight, countText.implicitHeight, 22)
         radius: height / 2
         visible: notifications.counted
         color: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
         opacity: 0.4
         border.width: 1
         border.color: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
-        // border.color:
-        // border.color: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
         Behavior on width {
             NumberAnimation {
                 duration: notifications.animationTime
@@ -60,7 +62,7 @@ Item {
     Icon {
         id: indicator
         anchors.left: parent.left
-        anchors.leftMargin: notifications.counted ? Theme.pillPadding : 0
+        anchors.leftMargin: notifications.counted ? Theme.iconInset + Theme.pillPadding : 0
         anchors.verticalCenter: parent.verticalCenter
         // bell-urgent for unread critical, bell-off while DND is on, bell otherwise
         glyph: notifications.critical ? "\ue07b" : (notifications.dndOn ? "\ue07a" : (notifications.unread ? "\ue07c" : ""))

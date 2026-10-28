@@ -27,10 +27,15 @@ Singleton {
     // Half the module spacing: inner gaps must read tighter than the gap
     // between modules or every module dissolves into its parts.
     readonly property int innerGap: Math.max(4, Math.round(spacing / 2))
-    // Padding for modules that draw a filled pill around their content
-    // (notifications, privacy): same as innerGap, so the pill edge sits
-    // closer to its own content than to the neighbour module.
-    readonly property int pillPadding: innerGap
+    // Padding between a pill's content and its edges (notifications, privacy).
+    readonly property int pillPadding: 4
+    // Bar glyphs are ink-centred inside a full-em advance (advance == upm),
+    // so every icon carries transparent side bearings: 0% (battery) up to
+    // 25% (bluetooth) of the em, ~12% on average (~2px at iconSize 18).
+    // Pill modules inset their pill by this average, aligning the pill edge
+    // with the ink edge of bare icon modules — otherwise the pill edge sits
+    // one bearing closer to neighbours and the external gap reads smaller.
+    readonly property int iconInset: Math.round(iconSize * 0.12)
 
     // Colors theme for the bar and modules (from the user config)
     readonly property color bgBarColor: Config.settings.colors.bgBarColor

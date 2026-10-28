@@ -54,6 +54,17 @@ PanelWindow {
     // Purely informational: never takes keyboard focus
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
+    // Compositor blur behind the OSD (`bar.blur`, ext-background-effect-v1),
+    // same treatment as the other bar popups: rounded region matching the
+    // background radius, `null` when off.
+    BackgroundEffect.blurRegion: Theme.blur ? blurRegion : null
+
+    Region {
+        id: blurRegion
+        item: osd.contentItem
+        radius: Theme.popupRadius
+    }
+
     // Resolve one axis: "center" (or anything non-numeric) centers the OSD,
     // a number is a pixel offset from the screen's top/left edge.
     function axisPos(value, size, span) {

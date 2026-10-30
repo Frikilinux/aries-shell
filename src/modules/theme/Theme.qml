@@ -26,7 +26,7 @@ Singleton {
     // Gap between the elements *inside* a module (icon<->text, icon<->icon).
     // Half the module spacing: inner gaps must read tighter than the gap
     // between modules or every module dissolves into its parts.
-    readonly property int innerGap: Math.max(7, Math.round(spacing / 2))
+    readonly property int innerGap: Math.max(2, Math.round(spacing / 2))
     // Padding between a pill's content and its edges (notifications, privacy).
     readonly property int pillPadding: 10
     // Bar glyphs are ink-centred inside a full-em advance (advance == upm),
@@ -83,10 +83,10 @@ Singleton {
     // 1=Normal, 2=Critical). Kept here so every notification surface shares it.
     function urgencyColor(u) {
         if (u === 0)
-            return urgencyLowColor;
+            return urgencyLowColor
         if (u === 2)
-            return urgencyCriticalColor;
-        return urgencyNormalColor;
+            return urgencyCriticalColor
+        return urgencyNormalColor
     }
 
     // CPU temperature color (sysinfo): normal color below the warning
@@ -94,12 +94,12 @@ Singleton {
     // the bar (fgBarColor) and popups (fgColor).
     function temperatureColor(temp, normal) {
         if (temp < 0)
-            return normal;
-        const t = Config.settings.modules.sysinfo;
+            return normal
+        const t = Config.settings.modules.sysinfo
         if (temp >= t.critTemp)
-            return peakColor;
+            return peakColor
         if (temp >= t.warnTemp)
-            return urgentColor;
-        return normal;
+            return urgentColor
+        return normal
     }
 }

@@ -14,8 +14,7 @@ Item {
     // The popup window, exposed for shell.qml.
     property alias popup: popupWindow
 
-    implicitWidth: indicator.implicitWidth
-        + (WeatherService.available ? tempLabel.implicitWidth : 0)
+    implicitWidth: indicator.implicitWidth + (WeatherService.available ? Theme.innerGap + tempLabel.implicitWidth : 0)
     implicitHeight: Math.max(indicator.implicitHeight, tempLabel.implicitHeight)
 
     // Module is visible only if outputs property is unset, matches this output, or contains it
@@ -40,7 +39,9 @@ Item {
         color: Theme.fgBarColor
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSize
-        font.features: ({ "tnum": 1 })
+        font.features: ({
+                "tnum": 1
+            })
     }
 
     MouseArea {

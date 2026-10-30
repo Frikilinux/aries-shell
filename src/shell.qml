@@ -109,13 +109,13 @@ ShellRoot {
                             output: barRoot.modelData.name
                             outputs: Config.outputs(Config.revision, "battery", barRoot.modelData.name)
                         },
-                        Clock {
-                            output: barRoot.modelData.name
-                            outputs: Config.outputs(Config.revision, "clock", barRoot.modelData.name)
-                        },
                         Weather {
                             output: barRoot.modelData.name
                             outputs: Config.outputs(Config.revision, "weather", barRoot.modelData.name)
+                        },
+                        Clock {
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "clock", barRoot.modelData.name)
                         },
                         Power {
                             output: barRoot.modelData.name

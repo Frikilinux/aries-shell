@@ -77,7 +77,7 @@ BarPopup {
         radius: 6
         color: Qt.rgba(0, 0, 0, 0.25)
         border.width: 1
-        border.color: searchField.activeFocus ? Theme.accentColor : Theme.buttonBorder
+        border.color: searchField.activeFocus ? Theme.accentColor : Theme.borderColorRest
 
         Icon {
             id: searchIcon
@@ -143,7 +143,7 @@ BarPopup {
     // Rectangle {
     //     width: popup.contentWidth
     //     height: 1
-    //     color: Theme.popupBorderColor
+    //     color: Theme.borderColorRest
     // }
 
     // Ranked results.
@@ -175,11 +175,9 @@ BarPopup {
             Rectangle {
                 anchors.fill: parent
                 radius: 6
-                color: row.isSelected
-                    ? Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.12)
-                    : (rowMouse.containsMouse
-                        ? Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.05)
-                        : "transparent")
+                color: row.isSelected || rowMouse.containsMouse
+                    ? Theme.bgColorHover
+                    : "transparent"
             }
 
             Item {

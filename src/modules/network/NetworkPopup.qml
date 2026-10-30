@@ -540,7 +540,7 @@ BarPopup {
             color: popup.devHeaderBgColor
             // color: Qt.rgba(Theme.bgColorMuted.r, Theme.bgColorMuted.g, Theme.bgColorMuted.b, 0.1)
             border.width: 1
-            border.color: Theme.buttonBorder
+            border.color: Theme.borderColorRest
             implicitHeight: vpnHeaderColumn.implicitHeight
 
             Column {
@@ -680,7 +680,7 @@ BarPopup {
                     height: popup.apRowHeight
                     radius: 6
                     color: vpnMouse.containsMouse
-                        ? Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.12)
+                        ? Theme.bgColorHover
                         : "transparent"
 
                     MouseArea {
@@ -778,7 +778,7 @@ BarPopup {
                 color: popup.devHeaderBgColor
                 implicitHeight: headerColumn.implicitHeight
                 border.width: 1
-                border.color: Theme.buttonBorder
+                border.color: Theme.borderColorRest
                 Column {
                     id: headerColumn
                     width: parent.width
@@ -982,7 +982,7 @@ BarPopup {
                             height: popup.apRowHeight
                             radius: 6
                             color: apMouse.containsMouse
-                                ? Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.12)
+                                ? Theme.bgColorHover
                                 : "transparent"
 
                             onPromptingChanged: if (prompting)
@@ -1102,7 +1102,7 @@ BarPopup {
                                         radius: 4
                                         color: Qt.rgba(0, 0, 0, 0.25)
                                         border.width: 1
-                                        border.color: Theme.buttonBorder
+                                        border.color: Theme.borderColorRest
 
                                         Text {
                                             anchors.fill: parent

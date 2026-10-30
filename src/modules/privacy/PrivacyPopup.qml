@@ -106,7 +106,7 @@ BarPopup {
     Rectangle {
         width: popup.contentWidth
         height: 1
-        color: Theme.popupBorderColor
+        color: Theme.borderColorRest
     }
 
     // Empty state (no capture while the popup is open).

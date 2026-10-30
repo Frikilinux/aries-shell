@@ -46,9 +46,9 @@ Item {
         visible: notifications.counted
         contentWidth: indicator.implicitWidth + countText.implicitWidth + Theme.innerGap
         contentHeight: Math.max(indicator.implicitHeight, countText.implicitHeight)
-        fillColor: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
+        fillColor: notifications.critical ? Theme.urgencyCriticalColor : Theme.borderColorRest
         fillOpacity: 0.4
-        borderColor: notifications.critical ? Theme.urgencyCriticalColor : Theme.buttonBorder
+        borderColor: notifications.critical ? Theme.urgencyCriticalColor : Theme.borderColorRest
         borderWidth: 1
         animationTime: notifications.animationTime
     }

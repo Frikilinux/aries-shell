@@ -21,9 +21,9 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: 4
-        color: root.active ? Theme.buttonChipBgColor : Theme.buttonBgColor
+        color: root.active ? Theme.accentColor : Theme.buttonBgColor
         border.width: 1
-        border.color: Theme.buttonBorder
+        border.color: Theme.borderColorRest
 
         Text {
             id: label

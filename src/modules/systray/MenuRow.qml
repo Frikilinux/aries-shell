@@ -70,7 +70,7 @@ Item {
         visible: !row.rowSeparator
         radius: Theme.popupRadius - 5
         color: row.rowEnabled && (rowMouse.containsMouse || row.focused)
-            ? Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.12)
+            ? Theme.bgColorHover
             : "transparent"
 
         Row {

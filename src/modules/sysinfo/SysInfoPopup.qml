@@ -121,7 +121,7 @@ BarPopup {
                 radius: width / 2
                 color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.04)
                 border.width: 1
-                border.color: Theme.buttonBorder
+                border.color: Theme.borderColorRest
             }
 
             Canvas {
@@ -268,7 +268,7 @@ BarPopup {
                 radius: 4
                 color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.04)
                 border.width: 1
-                border.color: Theme.buttonBorder
+                border.color: Theme.borderColorRest
 
                 // Plain Item, NOT a Row: a Row derives its implicitWidth from
                 // the delegates, whose width comes from barWidth, which reads
@@ -339,7 +339,7 @@ BarPopup {
                 radius: 4
                 color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.04)
                 border.width: 1
-                border.color: Theme.buttonBorder
+                border.color: Theme.borderColorRest
 
                 Canvas {
                     id: usageCanvas
@@ -413,7 +413,7 @@ BarPopup {
     Rectangle {
         width: parent.width
         height: 1
-        color: Theme.popupBorderColor
+        color: Theme.borderColorRest
     }
 
     // ------------------------------------------------------------------

@@ -156,7 +156,7 @@ PanelWindow {
         radius: Theme.popupRadius
         color: Qt.rgba(Theme.bgColor.r, Theme.bgColor.g, Theme.bgColor.b, Theme.bgOpacity)
         border.width: Theme.popupBorderWidth
-        border.color: Theme.popupBorderColor
+        border.color: Theme.borderColorRest
     }
 
     Column {
@@ -282,7 +282,7 @@ PanelWindow {
             border.width: 1
             border.color: (dialog.flow && dialog.flow.failed)
                 ? Theme.urgentColor
-                : Theme.buttonBorder
+                : Theme.borderColorRest
 
             Text {
                 anchors.fill: parent
@@ -367,7 +367,7 @@ PanelWindow {
         radius: 4
         color: button.primary ? Theme.buttonPrimaryBgColor : Theme.buttonBgColor
         border.width: button.primary ? 0 : 1
-        border.color: Theme.buttonBorder
+        border.color: Theme.borderColorRest
         opacity: button.enabled ? 1 : 0.5
 
         Text {

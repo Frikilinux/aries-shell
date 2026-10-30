@@ -174,7 +174,7 @@ BarPopup {
                         radius: 5
                         color: Qt.rgba(BatteryService.powerProfileColor.r, BatteryService.powerProfileColor.g, BatteryService.powerProfileColor.b, 0.5)
                         border.width: 1
-                        border.color: Theme.buttonBorder
+                        border.color: Theme.borderColorRest
 
                         Text {
                             id: powerProfileText
@@ -236,7 +236,7 @@ BarPopup {
     Rectangle {
         width: parent.width
         height: 1
-        color: Theme.popupBorderColor
+        color: Theme.borderColorRest
         visible: BatteryService.thresholdSupported
     }
 

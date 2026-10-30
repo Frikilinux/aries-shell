@@ -221,13 +221,17 @@ BarPopup {
         width: popup.contentWidth
         height: Math.max(popup.collapsedRowHeight, deviceInfo.implicitHeight + 10)
         radius: 6
-        // Background only for connected devices
-        color: deviceRow.connected ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.12) : "transparent"
+        // Connected devices keep a steady accent tint; the rest highlight on
+        // hover (Theme.bgColorHover), same as the other popup rows.
+        color: deviceRow.connected
+            ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.12)
+            : (deviceMouse.containsMouse ? Theme.bgColorHover : "transparent")
 
         // Clicking a disconnected row reveals/hides its info; clicking any
         // other device closes the open one. It never connects (connecting/
         // disconnecting stays on the Switch).
         MouseArea {
+            id: deviceMouse
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor

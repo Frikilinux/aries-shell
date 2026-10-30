@@ -195,7 +195,7 @@ BarPopup {
     Rectangle {
         width: popup.contentWidth
         height: 1
-        color: Theme.popupBorderColor
+        color: Theme.borderColorRest
     }
 
     DetailRow {

@@ -181,7 +181,7 @@ PanelWindow {
         radius: Theme.popupRadius
         color: Qt.rgba(root.winColor.r, root.winColor.g, root.winColor.b, root.winOpacity)
         border.width: Theme.popupBorderWidth
-        border.color: Theme.popupBorderColor
+        border.color: Theme.borderColorRest
     }
 
     // Clicking the popup backdrop (anywhere not on a row) dismisses this menu

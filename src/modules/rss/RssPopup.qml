@@ -23,7 +23,7 @@ BarPopup {
             anchors.fill: parent
             radius: 6
             color: over.containsMouse
-                ? Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.06)
+                ? Theme.bgColorHover
                 : "transparent"
         }
 
@@ -158,7 +158,7 @@ BarPopup {
         visible: RssService.displayed.length > 0
         width: popup.contentWidth
         height: 1
-        color: Theme.popupBorderColor
+        color: Theme.borderColorRest
     }
 
     Repeater {

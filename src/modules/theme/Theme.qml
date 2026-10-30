@@ -38,16 +38,22 @@ Singleton {
     readonly property int iconInset: Math.round(iconSize * 0.12)
 
     // Colors theme for the bar and modules (from the user config)
-    readonly property color bgBarColor: Config.settings.colors.bgBarColor
+    readonly property color accentColor: Config.settings.colors.accentColor
     readonly property color fgBarColor: Config.settings.colors.fgBarColor
-    readonly property color bgColor: Config.settings.colors.bgColor
-    readonly property color bgColorMuted: Config.settings.colors.bgColorMuted
+    readonly property color bgBarColor: Config.settings.colors.bgBarColor
     readonly property color fgColor: Config.settings.colors.fgColor
+    readonly property color bgColor: Config.settings.colors.bgColor
     readonly property color fgColorMuted: Config.settings.colors.fgColorMuted
-    // Shared background opacity of the bar/popups (colors.opacity)
+    readonly property color bgColorMuted: Config.settings.colors.bgColorMuted
+    readonly property color bgColorHover: Qt.alpha(fgColor, 0.05)
+    readonly property color urgentColor: Config.settings.colors.urgentColor
     readonly property real bgOpacity: Config.settings.colors.bgOpacity
-    readonly property color accentColor: Config.settings.colors.accent
-    readonly property color urgentColor: Config.settings.colors.urgent
+
+    // Borders colors
+    readonly property color borderColorActive: accentColor
+    readonly property color borderColorHover: accentColor
+    readonly property color borderColorRest: Config.settings.colors.borderColorRest
+
     // Notification urgency border colors (low / normal / critical)
     readonly property color urgencyLowColor: Config.settings.colors.urgencyLow
     readonly property color urgencyNormalColor: Config.settings.colors.urgencyNormal
@@ -55,13 +61,10 @@ Singleton {
     // Off-peak / peak indicator colors (DeepSeek API off-peak pricing)
     readonly property color offPeakColor: Config.settings.colors.offPeak
     readonly property color peakColor: Config.settings.colors.peak
-    readonly property color popupBorderColor: Config.settings.colors.popupBorder
 
     // Button/pill colors (used by e.g. the bluetooth device flags)
     readonly property color buttonBgColor: Config.settings.colors.buttonBgColor
-    readonly property color buttonBorder: Config.settings.colors.buttonBorder
     readonly property color buttonPrimaryBgColor: Config.settings.colors.buttonPrimaryBgColor
-    readonly property color buttonChipBgColor: Config.settings.colors.buttonChipBgColor
 
     // Popup appearance
     readonly property int popupRadius: Config.settings.colors.popupRadius

@@ -175,7 +175,7 @@ BarPopup {
             radius: Theme.popupRadius
             color: "transparent"
             border.width: Theme.popupBorderWidth
-            border.color: Theme.popupBorderColor
+            border.color: Theme.borderColorRest
         },
         // Aries mark in the top-right corner (branding; replaces the player's
         // app icon).

@@ -209,7 +209,7 @@ PanelWindow {
         radius: Theme.popupRadius
         color: Qt.rgba(popup.winColor.r, popup.winColor.g, popup.winColor.b, popup.winOpacity)
         border.width: Theme.popupBorderWidth
-        border.color: Theme.popupBorderColor
+        border.color: Theme.borderColorRest
     }
 
     // Backdrop slot (above the base background, below the content column),

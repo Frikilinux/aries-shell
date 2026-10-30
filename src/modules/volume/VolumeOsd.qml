@@ -111,7 +111,7 @@ PanelWindow {
         radius: Theme.popupRadius
         color: Qt.rgba(Theme.bgColor.r, Theme.bgColor.g, Theme.bgColor.b, Theme.bgOpacity)
         border.width: Theme.popupBorderWidth
-        border.color: Theme.popupBorderColor
+        border.color: Theme.borderColorRest
     }
 
     // Click anywhere dismisses the OSD early

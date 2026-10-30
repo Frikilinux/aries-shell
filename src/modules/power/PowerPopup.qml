@@ -32,14 +32,14 @@ BarPopup {
     // hibernate only when the kernel advertises them in /sys/power/state,
     // logout only when there is a niri session to quit.
     readonly property var actions: {
-        const list = ["shutdown", "restart"];
+        const list = ["shutdown", "restart"]
         if (PowerService.canHibernate)
-            list.push("hibernate");
+            list.push("hibernate")
         if (PowerService.canSuspend)
-            list.push("sleep");
+            list.push("sleep")
         if (Niri.available)
-            list.push("logout");
-        return list;
+            list.push("logout")
+        return list
     }
     readonly property int actionCount: actions.length
 
@@ -62,17 +62,17 @@ BarPopup {
     }
 
     readonly property string longestActionLabel: {
-        let best = "";
-        let bestWidth = -1;
+        let best = ""
+        let bestWidth = -1
         for (const a of popup.actions) {
-            const label = popup.actionLabel(a);
-            const width = tileLabelMetrics.advanceWidth(label);
+            const label = popup.actionLabel(a)
+            const width = tileLabelMetrics.advanceWidth(label)
             if (width > bestWidth) {
-                bestWidth = width;
-                best = label;
+                bestWidth = width
+                best = label
             }
         }
-        return best;
+        return best
     }
 
     readonly property real tileDisplayWidth: Math.max(tileWidth, Math.ceil(tileLabelMetrics.advanceWidth(popup.longestActionLabel)) + 2 * tilePadding)
@@ -97,7 +97,7 @@ BarPopup {
                 sleep: "Sleep",
                 hibernate: "Hibernate",
                 logout: "Log Out"
-            })[action] || "";
+            })[action] || ""
     }
 
     function actionGlyph(action) {
@@ -107,65 +107,65 @@ BarPopup {
                 sleep: "\ue051",
                 hibernate: "\ue05c",
                 logout: "\ue037"
-            })[action] || "\ue035";
+            })[action] || "\ue035"
     }
 
     function beginConfirm(action) {
         if (action === "shutdown" || action === "restart") {
-            popup.pendingAction = action;
-            popup.rowFocus = 0;
-            popup.countdown = popup.confirmSeconds;
-            confirmTimer.restart();
+            popup.pendingAction = action
+            popup.rowFocus = 0
+            popup.countdown = popup.confirmSeconds
+            confirmTimer.restart()
         } else {
             if (action === "logout")
-                Niri.quit();
+                Niri.quit()
             else
-                PowerService.execute(action);
-            popup.visible = false;
+                PowerService.execute(action)
+            popup.visible = false
         }
     }
 
     function cancelPending() {
-        confirmTimer.stop();
-        popup.pendingAction = "";
-        popup.countdown = popup.confirmSeconds;
+        confirmTimer.stop()
+        popup.pendingAction = ""
+        popup.countdown = popup.confirmSeconds
     }
 
     function confirmPending() {
-        confirmTimer.stop();
-        const act = popup.pendingAction;
-        popup.pendingAction = "";
+        confirmTimer.stop()
+        const act = popup.pendingAction
+        popup.pendingAction = ""
         if (act !== "")
-            PowerService.execute(act);
-        popup.visible = false;
+            PowerService.execute(act)
+        popup.visible = false
     }
 
     // Move keyboard focus to the neighbouring tile/button (wraps around)
     function moveFocus(step) {
-        const count = popup.confirmVisible ? 2 : popup.actionCount;
-        popup.rowFocus = (popup.rowFocus + step + count) % count;
+        const count = popup.confirmVisible ? 2 : popup.actionCount
+        popup.rowFocus = (popup.rowFocus + step + count) % count
     }
 
     // Activate the keyboard-focused control
     function activateFocused() {
         if (popup.confirmVisible) {
             if (popup.rowFocus === 0)
-                popup.cancelPending();
+                popup.cancelPending()
             else
-                popup.confirmPending();
+                popup.confirmPending()
         } else {
-            popup.beginConfirm(popup.actions[popup.rowFocus]);
+            popup.beginConfirm(popup.actions[popup.rowFocus])
         }
     }
 
     function popupOpened() {
-        PowerService.refresh();
-        popup.rowFocus = 0;
+        PowerService.refresh()
+        popup.rowFocus = 0
     }
 
     function popupClosed() {
-        cancelPending();
-        popup.rowFocus = 0;
+        cancelPending()
+        popup.rowFocus = 0
     }
 
     Timer {
@@ -173,9 +173,9 @@ BarPopup {
         interval: 1000
         repeat: true
         onTriggered: {
-            popup.countdown = Math.max(0, popup.countdown - 1);
+            popup.countdown = Math.max(0, popup.countdown - 1)
             if (popup.countdown <= 0)
-                popup.confirmPending();
+                popup.confirmPending()
         }
     }
 
@@ -192,8 +192,8 @@ BarPopup {
         Keys.onRightPressed: popup.moveFocus(1)
         Keys.onDownPressed: popup.moveFocus(1)
         Keys.onTabPressed: event => {
-            popup.moveFocus(event.modifiers & Qt.ShiftModifier ? -1 : 1);
-            event.accepted = true;
+            popup.moveFocus(event.modifiers & Qt.ShiftModifier ? -1 : 1)
+            event.accepted = true
         }
         Keys.onReturnPressed: popup.activateFocused()
         Keys.onEnterPressed: popup.activateFocused()

@@ -70,6 +70,17 @@ PanelWindow {
         ? WlrKeyboardFocus.Exclusive
         : WlrKeyboardFocus.None
 
+    // Compositor blur behind the dialog (`bar.blur`, ext-background-effect-v1),
+    // same treatment as the other bar popups: rounded region matching the
+    // background radius, `null` when off.
+    BackgroundEffect.blurRegion: Theme.blur ? blurRegion : null
+
+    Region {
+        id: blurRegion
+        item: dialog.contentItem
+        radius: Theme.popupRadius
+    }
+
     readonly property int dialogWidth: 380
     implicitWidth: dialogWidth
     implicitHeight: body.implicitHeight + 24

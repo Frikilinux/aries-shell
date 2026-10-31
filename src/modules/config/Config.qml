@@ -201,7 +201,10 @@ Singleton {
                     terminal: Quickshell.env("TERMINAL") || ""
                 },
                 emoji: {
-                    outputs: ["primary"]
+                    outputs: ["primary"],
+                    tileSize: 28,
+                    columns: 9,
+                    rows: 7
                 },
                 polkit: {
                     outputs: "*",

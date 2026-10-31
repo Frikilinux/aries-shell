@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "../config"
 
 // Backend of the emoji picker. Owns the bundled emoji database (loaded once
 // at boot), the search filter over its rows, the persisted recently-used list
@@ -27,6 +28,20 @@ Singleton {
 
     // Bar icon + popup search glyph (smiley, added to the icon font).
     readonly property string glyph: "\ue08d"
+
+    // Grid geometry from the config (`modules.emoji.*`, clamped so a bad or
+    // extreme value can't produce a broken popup): emoji tile size in px and
+    // the exact column / visible-row counts of the grid. The popup and cell
+    // sizes derive from these (see EmojiPopup).
+    readonly property int tileSize: root.intSetting("tileSize", 16, 64, 28)
+    readonly property int columns: root.intSetting("columns", 4, 16, 9)
+    readonly property int rows: root.intSetting("rows", 3, 14, 7)
+
+    // Clamp-or-default for an int config value (NaN / non-int -> default).
+    function intSetting(key, lo, hi, def) {
+        const n = parseInt(Config.settings.modules.emoji[key])
+        return isNaN(n) ? def : Math.max(lo, Math.min(hi, n))
+    }
 
     // Filtered rows for `query`; an empty query lists everything in dataset
     // order with the recently used emojis first.

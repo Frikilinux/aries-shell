@@ -21,8 +21,17 @@ BarPopup {
     required property var modelData
     screen: modelData
 
-    popupWidth: 340
-    maxContentHeight: 520
+    // Grid geometry: everything derives from the config
+    // (modules.emoji.tileSize / columns / rows, clamped in EmojiService).
+    // cellSize adds breathing room (hover ring) around the emoji tile; the
+    // popup width fits `columns` cells plus the content padding and the
+    // height fits `rows` cells plus the search row (capped by the screen, in
+    // which case the grid flicks).
+    readonly property int cellSize: EmojiService.tileSize + 16
+    readonly property int gridColumns: EmojiService.columns
+    readonly property int gridHeight: EmojiService.rows * popup.cellSize
+    popupWidth: popup.gridColumns * popup.cellSize + popup.contentPadding * 2
+    maxContentHeight: popup.screen ? Math.min(popup.gridHeight + 64, Math.round(popup.screen.height) - 96) : popup.gridHeight + 64
 
     // The picker opens centred on the screen, not under a bar icon (niri does
     // not expose the caret position, and tiled windows have no reported
@@ -37,10 +46,6 @@ BarPopup {
 
     // Keyboard-selected cell (0 = first).
     property int selected: 0
-
-    readonly property int cellSize: 44
-    readonly property int gridColumns: Math.max(1, Math.floor(popup.contentWidth / popup.cellSize))
-    readonly property int gridHeight: 7 * popup.cellSize
 
     function popupOpened() {
         EmojiService.query = ""
@@ -233,8 +238,7 @@ BarPopup {
                     // source on most Arch setups; monochrome fallback if
                     // missing).
                     font.family: Theme.fontFamily + ", Apple Color Emoji"
-                    font.pixelSize: Theme.fontSize * 2
-                    visible: cell.modelData.c !== ""
+                    font.pixelSize: EmojiService.tileSize
                 }
 
                 MouseArea {

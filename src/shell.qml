@@ -31,6 +31,7 @@ import "modules/offpeak"
 import "modules/notifications"
 import "modules/wallpaper"
 import "modules/launcher"
+import "modules/emoji"
 import "modules/polkit"
 import "modules/rss"
 import "modules/privacy"
@@ -51,6 +52,10 @@ ShellRoot {
                         Launcher {
                             output: barRoot.modelData.name
                             outputs: Config.outputs(Config.revision, "launcher", barRoot.modelData.name)
+                        },
+                        Emoji {
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "emoji", barRoot.modelData.name)
                         },
                         Workspaces {
                             output: barRoot.modelData.name
@@ -199,6 +204,23 @@ ShellRoot {
             sourceComponent: Component {
                 LauncherPopup {
                     modelData: launcherLoader.modelData
+                }
+            }
+        }
+    }
+
+    // Emoji picker popup: same lazy build pattern as the launcher (gate on
+    // EmojiIpc.enabled); one centred overlay per screen so a keybind opens it
+    // on the focused output and the bar icon toggles its own.
+    Variants {
+        model: Quickshell.screens
+        Loader {
+            id: emojiLoader
+            required property var modelData
+            active: EmojiIpc.enabled
+            sourceComponent: Component {
+                EmojiPopup {
+                    modelData: emojiLoader.modelData
                 }
             }
         }

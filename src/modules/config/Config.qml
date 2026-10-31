@@ -35,36 +35,37 @@ Singleton {
     // First arg of outputs() must be `root.revision`: it makes the shell's
     // `outputs:` bindings re-evaluate every time the config is (re)applied.
     function outputs(revision, moduleName, screenName) {
-        const o = root.settings.modules[moduleName].outputs;
+        const o = root.settings.modules[moduleName].outputs
         if (o === undefined || o === null || o === "*" || (Array.isArray(o) && o.indexOf("*") !== -1))
-            return undefined;                       // all screens
-        const list = Array.isArray(o) ? o : [o];
+            return undefined
+        // all screens
+        const list = Array.isArray(o) ? o : [o]
         if (list.length === 0)
-            return list;
+            return list
         if (list.includes(screenName) || (list.includes("primary") && screenName === root.primaryScreen))
-            return [screenName];
-        return [];
+            return [screenName]
+        return []
     }
 
     // Screen with the global origin (0,0) is treated as the primary monitor;
     // falls back to the first screen when no output sits at the origin.
     readonly property string primaryScreen: {
-        const screens = Quickshell.screens;
+        const screens = Quickshell.screens
         for (let i = 0; i < screens.length; i++) {
             if (screens[i].x === 0 && screens[i].y === 0)
-                return screens[i].name;
+                return screens[i].name
         }
-        return screens.length > 0 ? screens[0].name : "";
+        return screens.length > 0 ? screens[0].name : ""
     }
 
     // ------------------------------------------------------------------
     // Config file location
     // ------------------------------------------------------------------
     readonly property string configDir: {
-        const xdg = Quickshell.env("XDG_CONFIG_HOME");
-        const home = Quickshell.env("HOME");
-        const base = xdg ? ("" + xdg) : ((home ? "" + home : "") + "/.config");
-        return base + "/aries";
+        const xdg = Quickshell.env("XDG_CONFIG_HOME")
+        const home = Quickshell.env("HOME")
+        const base = xdg ? ("" + xdg) : ((home ? "" + home : "") + "/.config")
+        return base + "/aries"
     }
     readonly property string configPath: root.configDir + "/config.json"
 
@@ -199,6 +200,9 @@ Singleton {
                     outputs: ["primary"],
                     terminal: Quickshell.env("TERMINAL") || ""
                 },
+                emoji: {
+                    outputs: ["primary"]
+                },
                 polkit: {
                     outputs: "*",
                     x: "center",
@@ -240,25 +244,25 @@ Singleton {
     // as unknown keys.
     function merge(base, over, additive) {
         if (over === undefined || over === null || typeof over !== "object")
-            return over;
-        const out = {};
+            return over
+        const out = {}
         for (const k in base) {
-            const b = base[k];
-            const o = over[k];
+            const b = base[k]
+            const o = over[k]
             if (additive !== undefined && k in additive) {
-                const map = (o === undefined || o === null || typeof o !== "object") ? {} : o;
-                out[k] = {};
+                const map = (o === undefined || o === null || typeof o !== "object") ? {} : o
+                out[k] = {}
                 for (const bk in b)
-                    out[k][bk] = b[bk];
+                    out[k][bk] = b[bk]
                 for (const ok in map)
-                    out[k][ok] = map[ok];
+                    out[k][ok] = map[ok]
             } else if (b !== null && typeof b === "object" && !Array.isArray(b)) {
-                out[k] = o === undefined ? b : root.merge(b, o, additive);
+                out[k] = o === undefined ? b : root.merge(b, o, additive)
             } else {
-                out[k] = o === undefined ? b : o;
+                out[k] = o === undefined ? b : o
             }
         }
-        return out;
+        return out
     }
 
     // Replace the canonical settings with a (re)merge, then wake up the bound
@@ -267,10 +271,10 @@ Singleton {
         root.settings = over === undefined ? root.defaults : root.merge(root.defaults, over, {
             appNames: true,
             deviceIcons: true
-        });
-        root.ready = true;
-        root.revision++;
-        root.syncWatch();
+        })
+        root.ready = true
+        root.revision++
+        root.syncWatch()
     }
 
     // Give the FileView its config path once the file exists (the watcher can't
@@ -278,23 +282,23 @@ Singleton {
     // FileView ignores repeated identical path assignments.
     function syncWatch() {
         if (!fileWatch || fileWatch.path === root.configPath)
-            return;
-        fileWatch.path = root.configPath;
+            return
+        fileWatch.path = root.configPath
     }
 
     function parseConfig(text) {
-        root.lastRaw = text;
+        root.lastRaw = text
         try {
-            const data = JSON.parse(text);
-            root.loadError = "";
-            root.apply(data);
+            const data = JSON.parse(text)
+            root.loadError = ""
+            root.apply(data)
         } catch (e) {
-            root.loadError = "config: invalid JSON at " + root.configPath;
+            root.loadError = "config: invalid JSON at " + root.configPath
             if (root.ready) {
                 // Keep the last good settings during a transient edit (the
                 // editor writes in two steps); only the first boot falls back.
             } else {
-                root.apply(root.defaults);
+                root.apply(root.defaults)
             }
         }
     }
@@ -310,57 +314,57 @@ Singleton {
     // turn it back on just by editing the file).
     function onFileLoaded() {
         if (!root.ready)
-            return;
-        const text = fileWatch.text();
+            return
+        const text = fileWatch.text()
         if (text === "" || text === root.lastRaw)
-            return;
+            return
         if (root.settings.bar.reloadOnChange === false) {
-            let enables = false;
+            let enables = false
             try {
-                enables = JSON.parse(text).bar.reloadOnChange !== false;
+                enables = JSON.parse(text).bar.reloadOnChange !== false
             } catch (e) {}
             if (!enables)
-                return;
+                return
         }
-        root.parseConfig(text);
+        root.parseConfig(text)
     }
 
     // Create directory + file if missing, then read the contents.
     function load() {
-        root.loadError = "";
-        boot.command = ["/bin/sh", "-c", "d=\"$1\"; f=\"$2\"; mkdir -p \"$d\"; " + "[ -f \"$f\" ] || printf '%s' \"$3\" > \"$f\"; cat \"$f\"", "sh", root.configDir, root.configPath, root.defaultText];
-        boot.running = true;
+        root.loadError = ""
+        boot.command = ["/bin/sh", "-c", "d=\"$1\"; f=\"$2\"; mkdir -p \"$d\"; " + "[ -f \"$f\" ] || printf '%s' \"$3\" > \"$f\"; cat \"$f\"", "sh", root.configDir, root.configPath, root.defaultText]
+        boot.running = true
     }
 
     // Re-read the file from disk and re-apply (used by the future settings UI).
     function reload() {
-        root.load();
+        root.load()
     }
 
     // Mutate a module's setting and re-apply so bindings update live.
     function setModule(moduleName, key, value) {
         root.update(s => {
-            s.modules[moduleName][key] = value;
-        });
+            s.modules[moduleName][key] = value
+        })
     }
 
     // Mutate the canonical settings through a callback, then re-apply.
     function update(callback) {
-        const next = JSON.parse(JSON.stringify(root.settings));
-        callback(next);
-        root.apply(next);
+        const next = JSON.parse(JSON.stringify(root.settings))
+        callback(next)
+        root.apply(next)
     }
 
     // Persist the current canonical settings to disk.
     function save() {
-        const text = JSON.stringify(root.settings, null, 4);
-        root.lastRaw = text;
-        saveProcess.command = ["/bin/sh", "-c", "d=\"$1\"; f=\"$2\"; mkdir -p \"$d\"; printf '%s' \"$3\" > \"$f\"", "sh", root.configDir, root.configPath, text];
-        saveProcess.running = true;
+        const text = JSON.stringify(root.settings, null, 4)
+        root.lastRaw = text
+        saveProcess.command = ["/bin/sh", "-c", "d=\"$1\"; f=\"$2\"; mkdir -p \"$d\"; printf '%s' \"$3\" > \"$f\"", "sh", root.configDir, root.configPath, text]
+        saveProcess.running = true
     }
 
     Component.onCompleted: {
-        root.load();
+        root.load()
     }
 
     // Watches the config file (inotify underneath) so external edits re-apply
@@ -381,7 +385,7 @@ Singleton {
         }
         onExited: function (exitCode, exitStatus) {
             if (!root.ready)
-                root.apply(root.defaults);
+                root.apply(root.defaults)
         }
     }
 

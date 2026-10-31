@@ -1,0 +1,5 @@
+module modules.emoji
+singleton EmojiService 1.0 EmojiService.qml
+singleton EmojiIpc 1.0 EmojiIpc.qml
+Emoji 1.0 Emoji.qml
+EmojiPopup 1.0 EmojiPopup.qml

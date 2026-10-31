@@ -202,8 +202,8 @@ Singleton {
                 },
                 emoji: {
                     outputs: ["primary"],
-                    tileSize: 28,
-                    columns: 9,
+                    tileSize: 40,
+                    columns: 7,
                     rows: 7
                 },
                 polkit: {

@@ -38,7 +38,7 @@ BarPopup {
     // Keyboard-selected cell (0 = first).
     property int selected: 0
 
-    readonly property int cellSize: 36
+    readonly property int cellSize: 44
     readonly property int gridColumns: Math.max(1, Math.floor(popup.contentWidth / popup.cellSize))
     readonly property int gridHeight: 7 * popup.cellSize
 
@@ -177,69 +177,78 @@ BarPopup {
         }
     }
 
-    // Emoji grid (virtualised: only visible cells exist at a time). The grid
-    // is re-created with a fresh model on every open; contentY is reset by
-    // onCountChanged so the popup always starts at the top (recents first).
-    GridView {
-        id: resultsGrid
+    // Emoji grid (virtualised: only visible cells exist at a time), wrapped
+    // in a content-width item so the leftover partial column is centred, not
+    // left-hugging. The grid is re-created with a fresh model on every open;
+    // contentY is reset by onCountChanged so the popup always starts at the
+    // top (recents first).
+    Item {
+        width: popup.contentWidth
+        height: resultsGrid.height
 
-        width: popup.gridColumns * popup.cellSize
-        height: Math.min(popup.results.length * popup.cellSize, popup.gridHeight)
-        implicitHeight: height
-        model: popup.results
-        cellWidth: popup.cellSize
-        cellHeight: popup.cellSize
-        currentIndex: popup.selected
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
+        GridView {
+            id: resultsGrid
+            anchors.horizontalCenter: parent.horizontalCenter
 
-        onCountChanged: {
-            contentY = 0
-            returnToBounds()
-            if (popup.selected >= count)
-                popup.selected = Math.max(0, count - 1)
-        }
+            width: popup.gridColumns * popup.cellSize
+            height: Math.min(popup.results.length * popup.cellSize, popup.gridHeight)
+            implicitHeight: height
+            model: popup.results
+            cellWidth: popup.cellSize
+            cellHeight: popup.cellSize
+            currentIndex: popup.selected
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
 
-        delegate: Item {
-            id: cell
-            required property var modelData
-            required property int index
-
-            readonly property bool isSelected: cell.index === popup.selected
-
-            width: resultsGrid.cellWidth
-            height: resultsGrid.cellHeight
-
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: 2
-                radius: 6
-                color: cell.isSelected || cellMouse.containsMouse ? Theme.bgColorHover : "transparent"
+            onCountChanged: {
+                contentY = 0
+                returnToBounds()
+                if (popup.selected >= count)
+                    popup.selected = Math.max(0, count - 1)
             }
 
-            Text {
-                anchors.centerIn: parent
-                text: cell.modelData.c
-                // Colour emoji: `font.family` accepts a comma-separated
-                // fallback list in Qt 6, so the emoji-capable family rides on
-                // the theme font (Apple Color Emoji is the colour source on
-                // most Arch setups; monochrome fallback if missing).
-                font.family: Theme.fontFamily + ", Apple Color Emoji"
-                font.pixelSize: Theme.fontSize + 6
-                visible: cell.modelData.c !== ""
-            }
+            delegate: Item {
+                id: cell
+                required property var modelData
+                required property int index
 
-            MouseArea {
-                id: cellMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                // Hover is visual only: it must NOT move the keyboard
-                // selection, otherwise Enter would insert whatever sits
-                // under the pointer.
-                onClicked: {
-                    popup.selected = cell.index
-                    popup.activateSelected()
+                readonly property bool isSelected: cell.index === popup.selected
+
+                width: resultsGrid.cellWidth
+                height: resultsGrid.cellHeight
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    radius: 6
+                    color: cell.isSelected || cellMouse.containsMouse ? Theme.bgColorHover : "transparent"
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: cell.modelData.c
+                    // Colour emoji: `font.family` accepts a comma-separated
+                    // fallback list in Qt 6, so the emoji-capable family rides
+                    // on the theme font (Apple Color Emoji is the colour
+                    // source on most Arch setups; monochrome fallback if
+                    // missing).
+                    font.family: Theme.fontFamily + ", Apple Color Emoji"
+                    font.pixelSize: Theme.fontSize * 2
+                    visible: cell.modelData.c !== ""
+                }
+
+                MouseArea {
+                    id: cellMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    // Hover is visual only: it must NOT move the keyboard
+                    // selection, otherwise Enter would insert whatever sits
+                    // under the pointer.
+                    onClicked: {
+                        popup.selected = cell.index
+                        popup.activateSelected()
+                    }
                 }
             }
         }

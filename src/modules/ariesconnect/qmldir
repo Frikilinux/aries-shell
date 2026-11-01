@@ -1,0 +1,4 @@
+module modules.ariesconnect
+singleton AriesConnectService 1.0 AriesConnectService.qml
+AriesConnect 1.0 AriesConnect.qml
+AriesConnectPopup 1.0 AriesConnectPopup.qml

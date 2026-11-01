@@ -135,6 +135,9 @@ Singleton {
                     outputs: ["primary"],
                     deviceIcons: {}
                 },
+                ariesconnect: {
+                    outputs: ["primary"]
+                },
                 network: {
                     outputs: ["primary"]
                 },

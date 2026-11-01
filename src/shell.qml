@@ -21,6 +21,7 @@ import "modules/activewindow"
 import "modules/mpris"
 import "modules/network"
 import "modules/bluetooth"
+import "modules/ariesconnect"
 import "modules/battery"
 import "modules/sysinfo"
 import "modules/power"
@@ -101,6 +102,10 @@ ShellRoot {
                         Bluetooth {
                             output: barRoot.modelData.name
                             outputs: Config.outputs(Config.revision, "bluetooth", barRoot.modelData.name)
+                        },
+                        AriesConnect {
+                            output: barRoot.modelData.name
+                            outputs: Config.outputs(Config.revision, "ariesconnect", barRoot.modelData.name)
                         },
                         Network {
                             output: barRoot.modelData.name

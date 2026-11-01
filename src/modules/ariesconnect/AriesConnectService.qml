@@ -21,7 +21,9 @@ Singleton {
     readonly property string iface: "dev.zotta.AriesConnect"
 
     // Every device heard of this session:
-    //   { deviceId, name, paired, connected, request }
+    //   { deviceId, name, paired, connected, request, unpairing }
+    // `request` = a pairing request is pending (backend gives it 30 s),
+    // `unpairing` = an `Unpair` call is in flight.
     // `request` = a pairing request is pending (backend gives it 30 s).
     property var devices: []
 
@@ -98,7 +100,7 @@ Singleton {
             "paired": false,
             "connected": false,
             "request": false,
-            "disconnecting": false
+            "unpairing": false
         } : Object.assign({}, list[index])
         Object.assign(dev, fields)
         if (name !== undefined && name !== "")
@@ -140,18 +142,16 @@ Singleton {
         root.invoke("DismissNotification", ["ss", deviceId, notificationId])
     }
 
-    // Close the phone's control link (additive `Disconnect(s)`). The backend
-    // answers with `Disconnected`, which flips the popup switch off; the local
-    // `disconnecting` flag only disables the switch until then.
-    function disconnect(deviceId) {
+    // Forget the pairing (KDE Connect "unpair"). `PairingRemoved` moves the
+    // device out of the popup; `unpairing` only locks the row until the backend
+    // answers.
+    function unpair(deviceId) {
         root.patch(deviceId, {
-            "disconnecting": true
+            "unpairing": true
         })
-        root.invoke("Disconnect", ["s", deviceId])
-        disconnectTimeout.restart()
-    }
-
-    // Fire-and-forget method call; the state change comes back as a signal.
+        root.invoke("Unpair", ["s", deviceId])
+        unpairTimeout.restart()
+    }    // Fire-and-forget method call; the state change comes back as a signal.
     function invoke(method, args) {
         action.command = ["busctl", "--user", "call", root.busName, root.objectPath, root.iface, method].concat(args)
         action.running = true
@@ -189,7 +189,7 @@ Singleton {
                 "paired": false,
                 "connected": false,
                 "request": false,
-                "disconnecting": false
+                "unpairing": false
             } : list[index]
             const dev = Object.assign({}, prev, {
                 "paired": row[2] === true,
@@ -325,13 +325,13 @@ Singleton {
             root.available = true
             root.patch(String(data[0]), {
                 "connected": true,
-                "disconnecting": false
+                "unpairing": false
             })
             break
         case "Disconnected":
             root.patch(String(data[0]), {
                 "connected": false,
-                "disconnecting": false
+                "unpairing": false
             })
             root.scheduleRefresh()
             break
@@ -352,8 +352,17 @@ Singleton {
                 "paired": true,
                 "connected": true,
                 "request": false,
-                "disconnecting": false
+                "unpairing": false
             })
+            break
+        case "PairingRemoved":
+            // Unpaired from this desktop (`Unpair`) or another client.
+            root.patch(String(data[0]), {
+                "paired": false,
+                "request": false,
+                "unpairing": false
+            })
+            root.scheduleRefresh()
             break
         case "PairingRejected":
             root.lastRejectReason = String(data[1])
@@ -388,15 +397,15 @@ Singleton {
         root.devices = list
     }
 
-    // A missed `Disconnected` (or an unknown method) must not leave the switch
-    // disabled forever.
-    function clearDisconnecting() {
+    // A missed `PairingRemoved` (or an old backend without `Unpair`) must not
+    // leave the Unpair chip locked forever.
+    function clearUnpairing() {
         const list = root.devices.slice()
         let changed = false
         for (let i = 0; i < list.length; i++) {
-            if (list[i].disconnecting) {
+            if (list[i].unpairing) {
                 list[i] = Object.assign({}, list[i], {
-                    "disconnecting": false
+                    "unpairing": false
                 })
                 changed = true
             }
@@ -445,12 +454,12 @@ Singleton {
         onTriggered: root.clearRequests()
     }
 
-    // Upper bound for the `Disconnected` reply to a `Disconnect` call.
+    // Upper bound for the `PairingRemoved` reply to an `Unpair` call.
     Timer {
-        id: disconnectTimeout
+        id: unpairTimeout
         interval: 8000
 
-        onTriggered: root.clearDisconnecting()
+        onTriggered: root.clearUnpairing()
     }
 
     // Debounce for `scheduleRefresh()`: a burst of link churn collapses into
@@ -496,11 +505,11 @@ Singleton {
     Process {
         id: action
 
-        // Failed call (daemon gone, method not implemented yet): re-enable the
-        // switch instead of waiting for the timeout.
+        // Failed call (daemon gone, or an older backend without `Unpair`):
+        // re-enable the action instead of waiting for the timeout.
         onExited: function (exitCode) {
             if (exitCode !== 0)
-                root.clearDisconnecting()
+                root.clearUnpairing()
         }
     }
 }

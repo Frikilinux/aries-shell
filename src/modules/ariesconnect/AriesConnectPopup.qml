@@ -6,8 +6,8 @@ import "../icon"
 import "../popup"
 import "../widgets"
 
-// Devices paired with the `aries-connect` daemon. Only paired devices are
-// listed; a pending pairing request gets its own Accept / Reject block (the
+// Paired devices known to the `aries-connect` daemon, each with an `Unpair`
+// action. A pending pairing request gets its own Accept / Reject block (the
 // backend cancels it after 30 s and reports the reason). Phone notifications
 // mirrored by the daemon follow, newest first, each dismissable.
 BarPopup {
@@ -17,11 +17,9 @@ BarPopup {
 
     readonly property var request: AriesConnectService.request
 
-    // Paired only. `connected` alone is not enough: the backend keeps the
-    // device's link flag after a phone-side unpair (the row stays
-    // `paired: false, connected: true` until the socket closes), and an
-    // unpaired device is not actionable from the popup.
-    readonly property var deviceList: {
+    // Paired devices only: connected first, then name. `connected` alone is not
+    // a criterion (an unpaired device can keep a link after a phone-side unpair).
+    readonly property var pairedList: {
         const list = AriesConnectService.devices.filter(d => d.paired === true && !d.request)
         list.sort((a, b) => {
             const ca = a.connected ? 0 : 1
@@ -138,7 +136,7 @@ BarPopup {
     }
 
     Text {
-        visible: AriesConnectService.available && popup.deviceList.length === 0 && popup.request === null
+        visible: AriesConnectService.available && popup.pairedList.length === 0 && popup.request === null
         width: parent.width
         text: "No paired devices"
         color: Theme.fgColor
@@ -147,17 +145,53 @@ BarPopup {
         font.pixelSize: Theme.fontSize
     }
 
-    // One paired / connected device: name + status flags.
+    // Square icon button used for the row's quick actions. `background` is the
+    // resting fill (hover lightens it); disabled uses 40% opacity. Compact on
+    // purpose (the icon nearly fills the button) so new actions match.
+    component QuickAction: Rectangle {
+        id: actionButton
+        property string glyph: ""
+        property color background: Theme.buttonBgColor
+        property color foreground: Theme.fgColor
+        signal clicked
+
+        implicitWidth: 22
+        implicitHeight: 22
+        radius: 5
+        color: !actionButton.enabled ? actionButton.background : actionMouse.containsMouse ? Qt.lighter(actionButton.background, 1.25) : actionButton.background
+        opacity: actionButton.enabled ? 1 : 0.4
+
+        Icon {
+            anchors.fill: parent
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            glyph: actionButton.glyph
+            color: actionButton.foreground
+            font.pixelSize: 16
+        }
+
+        MouseArea {
+            id: actionMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: actionButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: actionButton.clicked()
+        }
+    }
+
+    // One paired device: big phone glyph, name, and the quick actions on the
+    // line under it (right aligned). Unpair is destructive: critical fill.
     component DeviceRow: Rectangle {
         id: deviceRow
         required property var modelData
-        readonly property bool connected: modelData.connected
-        // Switch is only usable while connected; `disconnecting` covers the
-        // round trip until `Disconnected` arrives.
-        readonly property bool disconnecting: modelData.disconnecting === true
-        readonly property bool canDisconnect: deviceRow.connected && !deviceRow.disconnecting
+        readonly property bool connected: modelData.connected === true
+        // An `Unpair` call is in flight until `PairingRemoved` answers.
+        readonly property bool unpairing: modelData.unpairing === true
         width: popup.contentWidth
-        height: 44
+        // Content + 6 px padding top/bottom: the quick-action button must not
+        // sit against the row's tinted edge (the name/action stack is taller
+        // than the glyph).
+        height: Math.max(48, deviceColumn.implicitHeight + 12)
         radius: 6
         color: deviceRow.connected ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.12) : "transparent"
 
@@ -165,21 +199,22 @@ BarPopup {
             anchors.fill: parent
             anchors.leftMargin: 8
             anchors.rightMargin: 8
-            spacing: 8
+            spacing: 12
 
             Icon {
                 anchors.verticalCenter: parent.verticalCenter
-                width: 18
+                width: 27
                 horizontalAlignment: Text.AlignHCenter
                 glyph: "\ue033" // phone
                 color: deviceRow.connected ? Theme.accentColor : Theme.fgColor
                 opacity: deviceRow.connected ? 1 : 0.6
-                font.pixelSize: 20
+                font.pixelSize: 30
             }
 
             Column {
+                id: deviceColumn
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - 18 - 34 - 2 * parent.spacing
+                width: parent.width - 27 - parent.spacing
                 spacing: 3
 
                 Text {
@@ -191,34 +226,31 @@ BarPopup {
                     elide: Text.ElideRight
                 }
 
-                Row {
-                    spacing: 4
+                // Quick actions (right aligned, same line the status chips used
+                // to occupy).
+                Item {
+                    width: parent.width
+                    height: 22
 
-                    Chip {
-                        text: "Paired"
-                        active: deviceRow.modelData.paired === true
-                        interactive: false
-                    }
+                    Row {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 4
 
-                    Chip {
-                        text: "Connected"
-                        active: deviceRow.connected
-                        interactive: false
+                        QuickAction {
+                            glyph: "\ue08e" // phone-subtract
+                            background: Theme.urgencyCriticalColor
+                            enabled: !deviceRow.unpairing
+                            onClicked: AriesConnectService.unpair(deviceRow.modelData.deviceId)
+                        }
                     }
                 }
-            }
-
-            Switch {
-                anchors.verticalCenter: parent.verticalCenter
-                checked: deviceRow.connected
-                enabled: deviceRow.canDisconnect
-                onToggled: AriesConnectService.disconnect(deviceRow.modelData.deviceId)
             }
         }
     }
 
     Repeater {
-        model: popup.deviceList
+        model: popup.pairedList
         delegate: DeviceRow {}
     }
 

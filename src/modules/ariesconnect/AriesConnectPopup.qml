@@ -6,10 +6,10 @@ import "../icon"
 import "../popup"
 import "../widgets"
 
-// Devices found by the `aries-connect` daemon. Only paired or connected
-// devices are listed; a pending pairing request gets its own Accept / Reject
-// block (the backend cancels it after 30 s and reports the reason). Phone
-// notifications mirrored by the daemon follow, newest first, each dismissable.
+// Devices paired with the `aries-connect` daemon. Only paired devices are
+// listed; a pending pairing request gets its own Accept / Reject block (the
+// backend cancels it after 30 s and reports the reason). Phone notifications
+// mirrored by the daemon follow, newest first, each dismissable.
 BarPopup {
     id: popup
 
@@ -17,9 +17,12 @@ BarPopup {
 
     readonly property var request: AriesConnectService.request
 
-    // Paired or connected only. Connected first, then alphabetically.
+    // Paired only. `connected` alone is not enough: the backend keeps the
+    // device's link flag after a phone-side unpair (the row stays
+    // `paired: false, connected: true` until the socket closes), and an
+    // unpaired device is not actionable from the popup.
     readonly property var deviceList: {
-        const list = AriesConnectService.devices.filter(d => (d.paired || d.connected) && !d.request)
+        const list = AriesConnectService.devices.filter(d => d.paired === true && !d.request)
         list.sort((a, b) => {
             const ca = a.connected ? 0 : 1
             const cb = b.connected ? 0 : 1
@@ -193,7 +196,7 @@ BarPopup {
 
                     Chip {
                         text: "Paired"
-                        active: true
+                        active: deviceRow.modelData.paired === true
                         interactive: false
                     }
 

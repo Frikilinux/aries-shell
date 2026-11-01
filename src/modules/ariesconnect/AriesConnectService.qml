@@ -50,10 +50,12 @@ Singleton {
         return null
     }
 
+    // Live devices only: a lingering link on an unpaired device must not light
+    // the glyph (see the popup's device filter).
     readonly property int connectedCount: {
         let n = 0
         for (let i = 0; i < root.devices.length; i++) {
-            if (root.devices[i].connected)
+            if (root.devices[i].paired && root.devices[i].connected)
                 n++
         }
         return n
@@ -117,6 +119,14 @@ Singleton {
             notificationsProcess.running = true
     }
 
+    // Coalesced refresh: link churn and rejected pairings are the only hints
+    // the daemon gives for changes it does not signal (a phone-side unpair
+    // arrives as `PairingRejected("peer unpaired")`, and Android replaces its
+    // socket often), so they are followed by an authoritative query.
+    function scheduleRefresh() {
+        refreshTimer.restart()
+    }
+
     function acceptPairing(deviceId) {
         root.invoke("AcceptPairing", ["s", deviceId])
     }
@@ -148,8 +158,10 @@ Singleton {
     }
 
     // `a(ssbb)` reply: data[0] = [[deviceId, name, paired, connected], ...].
-    // Merge instead of replacing so devices seen only through `DeviceSeen`
-    // and pending requests survive; flags come from the authoritative table.
+    // The reply is authoritative: the daemon emits nothing when a phone
+    // unpairs or when it restarts with an empty trust store, so a device
+    // missing here was forgotten and must be dropped. Only pending pairing
+    // requests survive from local state (they are signal-only).
     function applyDevices(text) {
         let rows
         try {
@@ -159,7 +171,7 @@ Singleton {
         }
         if (!Array.isArray(rows))
             return
-        const list = root.devices.slice()
+        const list = root.devices.filter(d => d.request === true).map(d => Object.assign({}, d))
         for (let r = 0; r < rows.length; r++) {
             const row = rows[r]
             if (!Array.isArray(row) || row.length < 4)
@@ -190,6 +202,15 @@ Singleton {
             else
                 list[index] = dev
         }
+        // Notifications of forgotten devices are gone on the daemon side too;
+        // `ActiveNotifications()` confirms it, this keeps the mirror coherent
+        // even if that reply is late.
+        const known = {}
+        for (let i = 0; i < list.length; i++)
+            known[list[i].deviceId] = true
+        const notes = root.notifications.filter(n => known[n.deviceId] === true)
+        if (notes.length !== root.notifications.length)
+            root.notifications = notes
         root.devices = list
     }
 
@@ -261,9 +282,35 @@ Singleton {
         } catch (e) {
             return
         }
-        if (msg.type !== "signal" || msg.interface !== root.iface)
+        if (msg.type !== "signal")
+            return
+        // The daemon coming or going is invisible on its own interface (no
+        // "daemon stopped"/"unpaired" event), so the well-known name is
+        // watched too: a restart must not leave the old table on screen.
+        if (msg.interface === "org.freedesktop.DBus" && msg.member === "NameOwnerChanged") {
+            const data = msg.payload && Array.isArray(msg.payload.data) ? msg.payload.data : []
+            if (data.length >= 3 && String(data[0]) === root.busName)
+                root.handleDaemonOwner(String(data[2]))
+            return
+        }
+        if (msg.interface !== root.iface)
             return
         root.handleSignal(msg.member, msg.payload && Array.isArray(msg.payload.data) ? msg.payload.data : [])
+    }
+
+    // `newOwner` is empty when the daemon left the session bus. A restarting
+    // daemon starts from an empty table (notifications are not persisted), so
+    // the mirror is dropped and rebuilt from the next initial sync.
+    function handleDaemonOwner(newOwner) {
+        root.synced = false
+        root.lastRejectReason = ""
+        root.devices = []
+        root.notifications = []
+        if (newOwner === "") {
+            root.available = false
+            return
+        }
+        root.refresh()
     }
 
     function handleSignal(member, data) {
@@ -286,6 +333,7 @@ Singleton {
                 "connected": false,
                 "disconnecting": false
             })
+            root.scheduleRefresh()
             break
         case "PairingRequested":
             root.available = true
@@ -312,6 +360,9 @@ Singleton {
             root.patch(String(data[0]), {
                 "request": false
             })
+            // A phone-side unpair arrives as this signal; the table says
+            // whether the device is still paired.
+            root.scheduleRefresh()
             break
         case "NotificationReceived":
             root.available = true
@@ -361,7 +412,10 @@ Singleton {
     Process {
         id: monitor
 
-        command: ["busctl", "--user", "monitor", "--json=short", "--match", "interface=" + root.iface]
+        // Two rules: the daemon's signals plus ownership changes of its
+        // well-known name (see handleDaemonOwner). The interface rule (not the
+        // sender) keeps working across a daemon restart.
+        command: ["busctl", "--user", "monitor", "--json=short", "--match", "interface=" + root.iface, "--match", "interface=org.freedesktop.DBus,member=NameOwnerChanged,arg0='" + root.busName + "'"]
 
         stdout: SplitParser {
             onRead: line => root.handleLine(line)
@@ -397,6 +451,15 @@ Singleton {
         interval: 8000
 
         onTriggered: root.clearDisconnecting()
+    }
+
+    // Debounce for `scheduleRefresh()`: a burst of link churn collapses into
+    // one query.
+    Timer {
+        id: refreshTimer
+        interval: 1500
+
+        onTriggered: root.refresh()
     }
 
     Process {

@@ -7,6 +7,7 @@ import Quickshell.Io
 import Quickshell.Services.Notifications
 import "../config"
 import "../niri"
+import "../ariesconnect"
 
 // Notification backend: the single org.freedesktop.Notifications server for the
 // whole shell, plus the in-memory history and its on-disk cache.
@@ -74,6 +75,9 @@ Singleton {
     // Maps a live server notification id to its entry id. Persisted entries have
     // no server object, so they are absent here.
     property var byServerId: ({})
+    // Phone notifications (aries-connect): `deviceId + notificationId` -> entry
+    // id, so backend updates/dismissals map onto the same history entry.
+    property var externalEntries: ({})
     // Monotonic local id generator (avoids clashing with server ids on reload).
     property int entrySeq: 0
 
@@ -81,6 +85,10 @@ Singleton {
     function bump() {
         root.revision++
     }
+
+    // Instantiated after the daemon already had a snapshot (module added at
+    // runtime): mirror it now, history-only.
+    Component.onCompleted: root.syncExternal()
 
     function entryById(id) {
         for (let i = 0; i < root.entries.length; i++) {
@@ -121,7 +129,9 @@ Singleton {
     function setDnd(value) {
         if (root.dnd === value)
             return
-        Config.update(s => { s.modules.notifications.dnd = value })
+        Config.update(s => {
+            s.modules.notifications.dnd = value
+        })
         Config.save()
         root.bump()
     }
@@ -167,6 +177,11 @@ Singleton {
         // handler sees the entry as gone and does not recurse.
         root._stopTimer(entry)
         root.entries = root.entries.filter(e => e.entryId !== id)
+        if (entry.external) {
+            // Also drop it from the phone's shade.
+            AriesConnectService.dismissNotification(entry.external.deviceId, entry.external.notificationId)
+            root._forgetExternal(entry)
+        }
         root._untrack(entry)
         if (entry.notification)
             entry.notification.dismiss()
@@ -184,6 +199,10 @@ Singleton {
             root._stopTimer(e)
             if (e.notification)
                 e.notification.dismiss()
+            if (e.external) {
+                AriesConnectService.dismissNotification(e.external.deviceId, e.external.notificationId)
+                root._forgetExternal(e)
+            }
             e.destroy()
         }
         root.schedulePersist()
@@ -243,7 +262,7 @@ Singleton {
         if (entry === null) {
             entry = entryComp.createObject(root, {
                 entryId: ++root.entrySeq,
-                time: Date.now(),
+                time: Date.now()
             })
             root.byServerId[sid] = entry.entryId
             root.entries = [entry].concat(root.entries)
@@ -283,6 +302,129 @@ Singleton {
         root.bump()
     }
 
+    // ------------------------------------------------- phone (aries-connect)
+    // The daemon exposes a mirrored list of the phone's active notifications.
+    // They become regular history entries (toast + notification popup) so the
+    // whole shell keeps a single notification surface; dismissing one from
+    // history removes it on the phone too. The first snapshot after startup is
+    // history only (no toast storm at login).
+    function externalKey(deviceId, notificationId) {
+        return JSON.stringify([deviceId, notificationId])
+    }
+
+    function syncExternal() {
+        const live = AriesConnectService.notifications
+        const seen = {}
+        for (let i = 0; i < live.length; i++) {
+            const n = live[i]
+            const key = root.externalKey(n.deviceId, n.notificationId)
+            seen[key] = true
+            const entry = root.entryById(root.externalEntries[key])
+            if (entry === null)
+                root._showExternal(n)
+            else
+                root._updateExternal(entry, n)
+        }
+        // Dropped by the phone (or on another client): mirror the removal.
+        const map = root.externalEntries
+        let stale = false
+        for (const key in map) {
+            if (seen[key])
+                continue
+            stale = true
+        }
+        if (!stale)
+            return
+        const next = {}
+        for (const key in map) {
+            if (seen[key]) {
+                next[key] = map[key]
+                continue
+            }
+            const entry = root.entryById(map[key])
+            if (entry !== null)
+                root._removeExternal(entry)
+        }
+        root.externalEntries = next
+    }
+
+    function _showExternal(n) {
+        const notify = AriesConnectService.synced
+        const entry = entryComp.createObject(root, {
+            entryId: ++root.entrySeq,
+            time: Date.now()
+        })
+        entry.external = {
+            deviceId: n.deviceId,
+            notificationId: n.notificationId
+        }
+        root._fillExternal(entry, n)
+        root.entries = [entry].concat(root.entries)
+        const map = Object.assign({}, root.externalEntries)
+        map[root.externalKey(n.deviceId, n.notificationId)] = entry.entryId
+        root.externalEntries = map
+        root._alertExternal(entry, notify)
+        root._trimHistory()
+        root.schedulePersist()
+        root.bump()
+    }
+
+    function _updateExternal(entry, n) {
+        // Same content re-fetched (popup refresh / popup open): nothing to do,
+        // otherwise every open would re-toast and reorder the history.
+        if (entry.appName === n.appName && entry.summary === n.title && entry.body === n.text)
+            return
+        root._fillExternal(entry, n)
+        entry.time = Date.now()
+        root._moveToTop(entry)
+        root._alertExternal(entry, AriesConnectService.synced)
+        root.schedulePersist()
+        root.bump()
+    }
+
+    function _fillExternal(entry, n) {
+        entry.appName = n.appName
+        entry.summary = n.title
+        entry.body = n.text
+        entry.urgency = NotificationUrgency.Normal
+        entry.isTransient = false
+    }
+
+    function _alertExternal(entry, notify) {
+        if (!notify) {
+            entry.unread = false
+            entry.popup = false
+            return
+        }
+        entry.unread = true
+        root.unread = root.unread + 1
+        if (root.dnd) {
+            entry.popup = false
+            return
+        }
+        entry.popup = true
+        root._startTimer(entry, -1)
+        root._enforceVisible()
+    }
+
+    // Backend already dropped it: no phone dismissal, just remove the entry.
+    function _removeExternal(entry) {
+        root._stopTimer(entry)
+        root.entries = root.entries.filter(e => e.entryId !== entry.entryId)
+        entry.destroy()
+        root.schedulePersist()
+        root.bump()
+    }
+
+    function _forgetExternal(entry) {
+        const key = root.externalKey(entry.external.deviceId, entry.external.notificationId)
+        if (root.externalEntries[key] !== entry.entryId)
+            return
+        const map = Object.assign({}, root.externalEntries)
+        delete map[key]
+        root.externalEntries = map
+    }
+
     // Called by an entry's Retainable connection when the server drops it
     // (client closed it, or we dismissed it).
     function onEntryDropped(entry) {
@@ -306,7 +448,10 @@ Singleton {
         const out = []
         const acts = notification.actions || []
         for (let i = 0; i < acts.length; i++)
-            out.push({ identifier: acts[i].identifier, text: acts[i].text })
+            out.push({
+                identifier: acts[i].identifier,
+                text: acts[i].text
+            })
         return out
     }
 
@@ -356,7 +501,7 @@ Singleton {
             return
         entry.timer = timerComp.createObject(root, {
             entryId: entry.entryId,
-            interval: interval,
+            interval: interval
         })
     }
 
@@ -387,6 +532,8 @@ Singleton {
             root._stopTimer(e)
             if (e.notification)
                 e.notification.dismiss()
+            if (e.external)
+                root._forgetExternal(e)
             e.destroy()
         }
     }
@@ -421,6 +568,9 @@ Singleton {
             urgency: entry.urgency,
             time: entry.time,
             actions: entry.actions,
+            // Phone origin (deviceId/notificationId) so the entry keeps being
+            // updated by the daemon after a shell restart instead of duplicated.
+            external: entry.external
         }
     }
 
@@ -440,11 +590,12 @@ Singleton {
             parsed = []
 
         const list = []
+        const external = {}
         for (let i = 0; i < parsed.length && i < root.maxHistory; i++) {
             const d = parsed[i]
             const entry = entryComp.createObject(root, {
                 entryId: ++root.entrySeq,
-                time: d.time !== undefined ? d.time : 0,
+                time: d.time !== undefined ? d.time : 0
             })
             entry.appName = d.appName || ""
             entry.appIcon = d.appIcon || ""
@@ -456,11 +607,15 @@ Singleton {
             entry.actions = d.actions || []
             entry.isTransient = false
             entry.popup = false
+            entry.external = d.external && d.external.deviceId && d.external.notificationId ? d.external : null
+            if (entry.external)
+                external[root.externalKey(entry.external.deviceId, entry.external.notificationId)] = entry.entryId
             list.push(entry)
         }
 
         // Anything received before the (async) cache read stays on top.
         root.entries = root.entries.concat(list)
+        root.externalEntries = Object.assign(external, root.externalEntries)
         root.loaded = true
         root.bump()
     }
@@ -486,6 +641,16 @@ Singleton {
         }
     }
 
+    // Phone mirror: one diff per backend change (initial snapshot, live signal,
+    // popup refresh). `AriesConnectService.synced` gates the startup snapshot
+    // (history only, no toast storm).
+    Connections {
+        target: AriesConnectService
+        function onNotificationsChanged() {
+            root.syncExternal()
+        }
+    }
+
     // Create the cache directory before the first read/write.
     Process {
         id: boot
@@ -505,7 +670,9 @@ Singleton {
         id: historyFile
         atomicWrites: true
         onLoaded: root.onHistoryLoaded()
-        onLoadFailed: function (error) { root.onHistoryLoadFailed(error) }
+        onLoadFailed: function (error) {
+            root.onHistoryLoadFailed(error)
+        }
     }
 
     // Coalesces bursts of notifications into a single disk write.
@@ -536,13 +703,20 @@ Singleton {
         property string desktopEntry: ""
         property int urgency: NotificationUrgency.Normal
         property var actions: []
+        // Phone origin ({ deviceId, notificationId }) for aries-connect entries;
+        // null for local server notifications.
+        property var external: null
         // Whether this entry arrived since the history was last opened.
         property bool unread: false
 
         readonly property Connections serverConn: Connections {
             target: entry.notification !== null ? entry.notification.Retainable : null
-            function onDropped() { root.onEntryDropped(entry) }
-            function onAboutToDestroy() { entry.notification = null }
+            function onDropped() {
+                root.onEntryDropped(entry)
+            }
+            function onAboutToDestroy() {
+                entry.notification = null
+            }
         }
     }
 

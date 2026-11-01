@@ -21,10 +21,11 @@ Singleton {
     readonly property string iface: "dev.zotta.AriesConnect"
 
     // Every device heard of this session:
-    //   { deviceId, name, paired, connected, request, unpairing }
+    //   { deviceId, name, paired, connected, request, unpairing, pingEnabled }
     // `request` = a pairing request is pending (backend gives it 30 s),
-    // `unpairing` = an `Unpair` call is in flight.
-    // `request` = a pairing request is pending (backend gives it 30 s).
+    // `unpairing` = an `Unpair` call is in flight,
+    // `pingEnabled` = last `PluginEnabled(id, "kdeconnect.ping")` reply
+    // (null until queried; unknown devices count as disabled).
     property var devices: []
 
     // A `Devices()` call succeeded: the daemon is up on the bus.
@@ -34,6 +35,17 @@ Singleton {
     property bool synced: false
     // Last rejection reason ("" = none), e.g. "timeout" / "cancelled".
     property string lastRejectReason: ""
+
+    // Last `PingDevice` failure: { deviceId, text } or null. The backend
+    // reports unpaired / plugin disabled / no active channel as a D-Bus error.
+    property var pingError: null
+
+    // Queue of device ids waiting for a `PluginEnabled(..., "kdeconnect.ping")`
+    // reply (one call at a time; see queryPlugins()).
+    property var pluginQueue: []
+
+    // The phone pinged us (popup/toast surfaces it).
+    signal pingReceived(string deviceId, string name, string message)
 
     // Notifications mirrored from the phones, oldest first (backend order:
     // phone timestamp for `ActiveNotifications()`, reception for signals):
@@ -100,7 +112,8 @@ Singleton {
             "paired": false,
             "connected": false,
             "request": false,
-            "unpairing": false
+            "unpairing": false,
+            "pingEnabled": null
         } : Object.assign({}, list[index])
         Object.assign(dev, fields)
         if (name !== undefined && name !== "")
@@ -151,7 +164,70 @@ Singleton {
         })
         root.invoke("Unpair", ["s", deviceId])
         unpairTimeout.restart()
-    }    // Fire-and-forget method call; the state change comes back as a signal.
+    }
+
+    // Desktop -> phone ping. Only meaningful when the device is paired,
+    // connected and the plugin is on (the popup enforces it); failures are
+    // reported by the backend as D-Bus errors and surfaced in `pingError`.
+    function ping(deviceId) {
+        root.pingError = null
+        pingProcess.deviceId = deviceId
+        pingProcess.command = ["busctl", "--user", "call", root.busName, root.objectPath, root.iface, "PingDevice", "ss", deviceId, ""]
+        pingProcess.running = true
+    }
+
+    // `kdeconnect.ping` state for one device, straight from the backend.
+    function queryPlugin(deviceId) {
+        if (deviceId === "")
+            return
+        root.pluginQueue = root.pluginQueue.concat([deviceId])
+        root.runPluginQuery()
+    }
+
+    function queryPlugins() {
+        const ids = []
+        for (let i = 0; i < root.devices.length; i++)
+            ids.push(root.devices[i].deviceId)
+        root.pluginQueue = ids
+        root.runPluginQuery()
+    }
+
+    function runPluginQuery() {
+        if (pluginProcess.running || root.pluginQueue.length === 0)
+            return
+        const queue = root.pluginQueue.slice()
+        const deviceId = queue.shift()
+        root.pluginQueue = queue
+        pluginProcess.deviceId = deviceId
+        pluginProcess.command = ["busctl", "--user", "--json=short", "call", root.busName, root.objectPath, root.iface, "PluginEnabled", "ss", deviceId, "kdeconnect.ping"]
+        pluginProcess.running = true
+    }
+
+    // Patch only if the device is still known: a reply arriving after
+    // `PairingRemoved` must not resurrect it.
+    function setPingEnabled(deviceId, enabled) {
+        const list = root.devices.slice()
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].deviceId !== deviceId)
+                continue
+            if (list[i].pingEnabled === enabled)
+                return
+            list[i] = Object.assign({}, list[i], {
+                "pingEnabled": enabled
+            })
+            root.devices = list
+            return
+        }
+    }
+
+    function deviceLabelById(deviceId) {
+        for (let i = 0; i < root.devices.length; i++) {
+            if (root.devices[i].deviceId === deviceId)
+                return root.deviceLabel(root.devices[i])
+        }
+        return deviceId
+    }
+
     function invoke(method, args) {
         action.command = ["busctl", "--user", "call", root.busName, root.objectPath, root.iface, method].concat(args)
         action.running = true
@@ -171,6 +247,10 @@ Singleton {
         }
         if (!Array.isArray(rows))
             return
+        // Preserve per-device local state (`pingEnabled`) across reconciles.
+        const previous = {}
+        for (let i = 0; i < root.devices.length; i++)
+            previous[root.devices[i].deviceId] = root.devices[i]
         const list = root.devices.filter(d => d.request === true).map(d => Object.assign({}, d))
         for (let r = 0; r < rows.length; r++) {
             const row = rows[r]
@@ -183,13 +263,15 @@ Singleton {
                     break
                 }
             }
+            const known = previous[row[0]]
             const prev = index === -1 ? {
                 "deviceId": row[0],
                 "name": "",
                 "paired": false,
                 "connected": false,
                 "request": false,
-                "unpairing": false
+                "unpairing": false,
+                "pingEnabled": known !== undefined ? known.pingEnabled : null
             } : list[index]
             const dev = Object.assign({}, prev, {
                 "paired": row[2] === true,
@@ -212,6 +294,8 @@ Singleton {
         if (notes.length !== root.notifications.length)
             root.notifications = notes
         root.devices = list
+        // Ping plugin state is per device and not part of `Devices()`.
+        root.queryPlugins()
     }
 
     // `a(sssss)` reply: data[0] = [[deviceId, notificationId, appName,
@@ -306,6 +390,8 @@ Singleton {
         root.lastRejectReason = ""
         root.devices = []
         root.notifications = []
+        root.pingError = null
+        root.pluginQueue = []
         if (newOwner === "") {
             root.available = false
             return
@@ -354,14 +440,14 @@ Singleton {
                 "request": false,
                 "unpairing": false
             })
+            root.queryPlugin(String(data[0]))
             break
         case "PairingRemoved":
-            // Unpaired from this desktop (`Unpair`) or another client.
-            root.patch(String(data[0]), {
-                "paired": false,
-                "request": false,
-                "unpairing": false
-            })
+            // Unpaired from this desktop (`Unpair`) or another client: drop it
+            // from the UI right away, then reconcile.
+            root.devices = root.devices.filter(d => d.deviceId !== String(data[0]))
+            if (root.pingError !== null && root.pingError.deviceId === String(data[0]))
+                root.pingError = null
             root.scheduleRefresh()
             break
         case "PairingRejected":
@@ -379,6 +465,16 @@ Singleton {
             break
         case "NotificationDismissed":
             root.removeNotification(String(data[0]), String(data[1]))
+            break
+        case "PingReceived":
+            // The phone pinged us: surface it (toast + popup history) and let
+            // the popup keep the message.
+            root.pingReceived(String(data[0]), root.deviceLabelById(String(data[0])), String(data[1]))
+            break
+        case "PluginStateChanged":
+            // Only the ping plugin is shown for now; ignore the rest.
+            if (String(data[1]) === "kdeconnect.ping")
+                root.setPingEnabled(String(data[0]), data[2] === true)
             break
         }
     }
@@ -499,6 +595,52 @@ Singleton {
                 return
             root.available = true
             root.synced = true
+        }
+    }
+
+    // `PluginEnabled(id, "kdeconnect.ping")` replies, serialized (one call at a
+    // time): `{"type":"b","data":[true]}`.
+    Process {
+        id: pluginProcess
+        property string deviceId: ""
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let value
+                try {
+                    value = JSON.parse(text).data[0]
+                } catch (e) {
+                    return
+                }
+                if (typeof value === "boolean")
+                    root.setPingEnabled(pluginProcess.deviceId, value)
+            }
+        }
+
+        onExited: root.runPluginQuery()
+    }
+
+    // `PingDevice` reports "not paired" / "plugin disabled" / "no active
+    // channel" as a D-Bus error: keep the message for the popup.
+    Process {
+        id: pingProcess
+        property string deviceId: ""
+
+        stderr: StdioCollector {
+            id: pingStderr
+        }
+
+        onExited: function (exitCode) {
+            if (exitCode === 0)
+                return
+            let text = String(pingStderr.text || "").trim()
+            const prefix = "Call failed: "
+            if (text.indexOf(prefix) === 0)
+                text = text.slice(prefix.length)
+            root.pingError = {
+                "deviceId": pingProcess.deviceId,
+                "text": text !== "" ? text : "Ping failed"
+            }
         }
     }
 

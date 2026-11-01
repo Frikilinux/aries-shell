@@ -302,6 +302,26 @@ Singleton {
         root.bump()
     }
 
+    // Local notice (neither a client notification nor a phone one), e.g. a ping
+    // received from the phone: same surface as everything else (toast +
+    // history), no server object behind it.
+    function showLocal(appName, summary, body) {
+        const entry = entryComp.createObject(root, {
+            entryId: ++root.entrySeq,
+            time: Date.now()
+        })
+        entry.appName = appName
+        entry.summary = summary
+        entry.body = body
+        entry.isTransient = false
+        entry.urgency = NotificationUrgency.Normal
+        root.entries = [entry].concat(root.entries)
+        root._alertExternal(entry, true)
+        root._trimHistory()
+        root.schedulePersist()
+        root.bump()
+    }
+
     // ------------------------------------------------- phone (aries-connect)
     // The daemon exposes a mirrored list of the phone's active notifications.
     // They become regular history entries (toast + notification popup) so the
@@ -646,8 +666,14 @@ Singleton {
     // (history only, no toast storm).
     Connections {
         target: AriesConnectService
+
         function onNotificationsChanged() {
             root.syncExternal()
+        }
+
+        // Desktop-side ping from the phone (kdeconnect.ping): toast + history.
+        function onPingReceived(deviceId, name, message) {
+            root.showLocal("Aries Connect", name !== "" ? name : deviceId, message !== "" ? message : "Ping")
         }
     }
 

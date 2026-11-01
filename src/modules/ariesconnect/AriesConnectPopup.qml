@@ -39,6 +39,11 @@ BarPopup {
         AriesConnectService.refresh()
     }
 
+    // Ping errors belong to one attempt: don't keep them across opens.
+    function popupClosed() {
+        AriesConnectService.pingError = null
+    }
+
     // Header: title + close
     Item {
         width: parent.width
@@ -145,20 +150,24 @@ BarPopup {
         font.pixelSize: Theme.fontSize
     }
 
-    // Square icon button used for the row's quick actions. `background` is the
-    // resting fill (hover lightens it); disabled uses 40% opacity. Compact on
-    // purpose (the icon nearly fills the button) so new actions match.
+    // Square icon button used for the row's quick actions: neutral fill plus
+    // the resting border color (hover lightens it); disabled uses 40% opacity.
+    // `background`/`hoverBackground` let a single action stand out (unpair is
+    // critical). Compact on purpose so the icon nearly fills the button.
     component QuickAction: Rectangle {
         id: actionButton
         property string glyph: ""
-        property color background: Theme.buttonBgColor
+        property color background: Qt.darker(Theme.bgColor, 1.1)
+        property color hoverBackground: Qt.lighter(Theme.bgBarColor, 2)
         property color foreground: Theme.fgColor
         signal clicked
 
-        implicitWidth: 22
-        implicitHeight: 22
+        implicitWidth: 28
+        implicitHeight: 28
         radius: 5
-        color: !actionButton.enabled ? actionButton.background : actionMouse.containsMouse ? Qt.lighter(actionButton.background, 1.25) : actionButton.background
+        color: actionMouse.containsMouse ? actionButton.hoverBackground : actionButton.background
+        border.width: 1
+        border.color: Theme.borderColorRest
         opacity: actionButton.enabled ? 1 : 0.4
 
         Icon {
@@ -180,20 +189,27 @@ BarPopup {
     }
 
     // One paired device: big phone glyph, name, and the quick actions on the
-    // line under it (right aligned). Unpair is destructive: critical fill.
+    // line under it (right aligned). Ping needs a live link and the plugin on
+    // (disabled otherwise, no explanatory text).
     component DeviceRow: Rectangle {
         id: deviceRow
         required property var modelData
         readonly property bool connected: modelData.connected === true
         // An `Unpair` call is in flight until `PairingRemoved` answers.
         readonly property bool unpairing: modelData.unpairing === true
+        // `null` = not queried yet; treat it as disabled (backend default for
+        // unknown/unpaired devices).
+        readonly property bool pingEnabled: modelData.pingEnabled === true
+        readonly property bool pingReady: deviceRow.connected && deviceRow.pingEnabled
+        readonly property string pingErrorText: AriesConnectService.pingError !== null && AriesConnectService.pingError.deviceId === deviceRow.modelData.deviceId ? AriesConnectService.pingError.text : ""
         width: popup.contentWidth
         // Content + 6 px padding top/bottom: the quick-action button must not
         // sit against the row's tinted edge (the name/action stack is taller
         // than the glyph).
         height: Math.max(48, deviceColumn.implicitHeight + 12)
         radius: 6
-        color: deviceRow.connected ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.12) : "transparent"
+        color: deviceRow.connected ? Theme.bgColorHover : "transparent"
+        // color: deviceRow.connected ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.12) : "transparent"
 
         Row {
             anchors.fill: parent
@@ -226,24 +242,42 @@ BarPopup {
                     elide: Text.ElideRight
                 }
 
-                // Quick actions (right aligned, same line the status chips used
-                // to occupy).
+                // Quick actions, right aligned.
                 Item {
                     width: parent.width
-                    height: 22
+                    height: actionsRow.implicitHeight
 
                     Row {
+                        id: actionsRow
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 4
+                        spacing: 8
+
+                        QuickAction {
+                            glyph: "\ue08f" // send
+                            enabled: deviceRow.pingReady
+                            onClicked: AriesConnectService.ping(deviceRow.modelData.deviceId)
+                        }
 
                         QuickAction {
                             glyph: "\ue08e" // phone-subtract
                             background: Theme.urgencyCriticalColor
+                            hoverBackground: Qt.lighter(Theme.urgencyCriticalColor, 1.15)
                             enabled: !deviceRow.unpairing
                             onClicked: AriesConnectService.unpair(deviceRow.modelData.deviceId)
                         }
                     }
+                }
+
+                // Backend error for the last ping (D-Bus message, verbatim).
+                Text {
+                    visible: deviceRow.pingErrorText !== ""
+                    width: parent.width
+                    text: deviceRow.pingErrorText
+                    color: Theme.urgencyCriticalColor
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSize - 3
+                    wrapMode: Text.Wrap
                 }
             }
         }

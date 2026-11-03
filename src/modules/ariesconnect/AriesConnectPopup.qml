@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "../battery"
 import "../theme"
 import "../icon"
 import "../popup"
@@ -188,9 +189,10 @@ BarPopup {
         }
     }
 
-    // One paired device: big phone glyph, name, and the quick actions on the
-    // line under it (right aligned). Ping needs a live link and the plugin on
-    // (disabled otherwise, no explanatory text).
+    // One paired device: big phone glyph, name with the last reported battery
+    // on the right, and the quick actions on the line under it (right aligned).
+    // Ping needs a live link and the plugin on (disabled otherwise, no
+    // explanatory text).
     component DeviceRow: Rectangle {
         id: deviceRow
         required property var modelData
@@ -202,6 +204,15 @@ BarPopup {
         readonly property bool pingEnabled: modelData.pingEnabled === true
         readonly property bool pingReady: deviceRow.connected && deviceRow.pingEnabled
         readonly property string pingErrorText: AriesConnectService.pingError !== null && AriesConnectService.pingError.deviceId === deviceRow.modelData.deviceId ? AriesConnectService.pingError.text : ""
+        // Charge to show: the current report, or the last one seen while the
+        // phone is offline (the daemon clears `BatteryLevel` when the control
+        // channel closes, so the stale value is cached here).
+        readonly property int batteryLevel: modelData.batteryLevel >= 0 ? modelData.batteryLevel : modelData.lastBatteryLevel
+        readonly property bool batteryKnown: deviceRow.batteryLevel >= 0
+        // Only a connected device with a live report gets the bright
+        // indicator; a cached value is dimmed.
+        readonly property bool batteryCurrent: deviceRow.connected && modelData.batteryLevel >= 0
+        readonly property bool charging: modelData.charging === true
         width: popup.contentWidth
         // Content + 6 px padding top/bottom: the quick-action button must not
         // sit against the row's tinted edge (the name/action stack is taller
@@ -233,13 +244,57 @@ BarPopup {
                 width: parent.width - 27 - parent.spacing
                 spacing: 3
 
-                Text {
+                // Name line: name on the left, last reported battery on the
+                // right edge of the popup content (same margin as the actions).
+                Item {
                     width: parent.width
-                    text: AriesConnectService.deviceLabel(deviceRow.modelData)
-                    color: Theme.fgColor
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize
-                    elide: Text.ElideRight
+                    height: Math.max(nameText.implicitHeight, batteryGroup.height)
+
+                    Text {
+                        id: nameText
+                        anchors.left: parent.left
+                        anchors.right: deviceRow.batteryKnown ? batteryGroup.left : parent.right
+                        anchors.rightMargin: deviceRow.batteryKnown ? 6 : 0
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: AriesConnectService.deviceLabel(deviceRow.modelData)
+                        color: Theme.fgColor
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
+                        elide: Text.ElideRight
+                    }
+
+                    // Battery icon + percentage, right aligned. Hidden when no
+                    // level was ever reported. While the phone is offline (or
+                    // the level is currently unknown) the last value is shown
+                    // dimmed, never as if it were live.
+                    Item {
+                        id: batteryGroup
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: deviceRow.batteryKnown
+                        width: batteryIcon.implicitWidth + 6 + batteryText.implicitWidth
+                        height: Math.max(batteryIcon.implicitHeight, batteryText.implicitHeight)
+                        opacity: deviceRow.batteryCurrent ? 1 : 0.5
+
+                        Icon {
+                            id: batteryIcon
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            glyph: BatteryService.batteryLevelGlyph(deviceRow.batteryLevel, deviceRow.charging)
+                            color: deviceRow.batteryCurrent ? Theme.accentColor : Theme.fgColorMuted
+                            font.pixelSize: Theme.fontSize * 1.2
+                        }
+
+                        Text {
+                            id: batteryText
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Math.round(deviceRow.batteryLevel) + "%"
+                            color: Theme.fgColorMuted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSize - 3
+                        }
+                    }
                 }
 
                 // Quick actions, right aligned.

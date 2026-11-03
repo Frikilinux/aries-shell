@@ -189,9 +189,12 @@ Singleton {
 
     // Plain level glyph for a 0..100 percentage, rounded to the nearest 10%
     // step. Ignores the local charger state -> use it for peripheral batteries
-    // (Bluetooth devices), which must only reflect their own charge.
-    function batteryLevelGlyph(percent) {
+    // (Bluetooth devices, phones), which must only reflect their own charge:
+    // pass `charging` to pick the battery-with-bolt variant of that device.
+    function batteryLevelGlyph(percent, charging) {
         const level = Math.max(0, Math.min(10, Math.round(percent / 10)))
+        if (charging === true)
+            return root.chargeGlyphs[level]
         return root.batteryGlyphs[level]
     }
 

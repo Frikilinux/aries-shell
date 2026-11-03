@@ -33,13 +33,20 @@ Singleton {
 
     // Every device known to the daemon, mirroring its device objects:
     //   { deviceId, path, name, type, paired, connected, request, unpairing,
-    //     pingEnabled }
+    //     pingEnabled, batteryLevel, lastBatteryLevel, charging }
     // `path` = the object path announced by the daemon ("" while a pairing
     // request arrives for a device whose object is not registered yet),
     // `request` = a pairing request is pending (backend gives it 30 s),
     // `unpairing` = an `Unpair` call is in flight,
     // `pingEnabled` = `Plugins["kdeconnect.ping"]` (the plugin map always lists
-    // every implemented plugin, so a missing key means "not implemented").
+    // every implemented plugin, so a missing key means "not implemented"),
+    // `batteryLevel` = charge 0..100 as currently reported, `-1` when unknown
+    // (no report yet, no battery, plugin disabled, unpaired or offline: the
+    // daemon drops the cached value when the control channel closes),
+    // `lastBatteryLevel` = last reported charge, kept locally so the popup can
+    // still show it dimmed while the phone is offline (`-1` when never
+    // reported),
+    // `charging` = the phone currently reports that it is plugged in.
     property var devices: []
 
     // A `GetManagedObjects()` call succeeded: the daemon is up on the bus.
@@ -150,7 +157,10 @@ Singleton {
             "connected": false,
             "request": false,
             "unpairing": false,
-            "pingEnabled": false
+            "pingEnabled": false,
+            "batteryLevel": -1,
+            "lastBatteryLevel": -1,
+            "charging": false
         } : Object.assign({}, list[index])
         Object.assign(dev, fields)
         if (name !== undefined && name !== "")
@@ -261,6 +271,8 @@ Singleton {
             return null
         const old = previous[id]
         const paired = root.propValue(props, "Paired") === true
+        const level = root.propValue(props, "BatteryLevel")
+        const current = typeof level === "number" ? level : -1
         return {
             "deviceId": id,
             "path": String(path),
@@ -270,8 +282,20 @@ Singleton {
             "connected": root.propValue(props, "Connected") === true,
             "request": old !== undefined && old.request === true && !paired,
             "unpairing": old !== undefined && old.unpairing === true && paired,
-            "pingEnabled": root.pluginEnabled(props, "kdeconnect.ping")
+            "pingEnabled": root.pluginEnabled(props, "kdeconnect.ping"),
+            "batteryLevel": current,
+            // The daemon drops the level when the phone goes offline: keep the
+            // last reported one locally so the popup can dim it instead of
+            // hiding the indicator.
+            "lastBatteryLevel": current >= 0 ? current : root.lastBatteryOf(old),
+            "charging": root.propValue(props, "IsCharging") === true
         }
+    }
+
+    function lastBatteryOf(dev) {
+        if (dev === null || dev === undefined || typeof dev.lastBatteryLevel !== "number")
+            return -1
+        return dev.lastBatteryLevel
     }
 
     // `a{oa{sa{sv}}}` reply: data[0] = { "<path>": { "<iface>": { "<prop>":
@@ -536,14 +560,33 @@ Singleton {
             fields.type = root.propValue(changed, "DeviceType") || ""
         if ("Connected" in changed)
             fields.connected = root.propValue(changed, "Connected") === true
+        // Charge as currently reported (the daemon clears it when the phone
+        // goes offline) and the phone's charging state. The last reported level
+        // is kept locally for the dimmed stale display.
+        if ("BatteryLevel" in changed) {
+            const level = root.propValue(changed, "BatteryLevel")
+            const current = typeof level === "number" ? level : -1
+            fields.batteryLevel = current
+            if (current >= 0)
+                fields.lastBatteryLevel = current
+        }
+        if ("IsCharging" in changed)
+            fields.charging = root.propValue(changed, "IsCharging") === true
         if ("Paired" in changed) {
             const paired = root.propValue(changed, "Paired") === true
             fields.paired = paired
             fields.unpairing = false
             if (paired)
                 fields.request = false
-            else if (root.pingError !== null && root.pingError.deviceId === dev.deviceId)
-                root.pingError = null
+            else {
+                // The daemon resets the battery when the device is unpaired;
+                // don't keep a value from the old pairing around.
+                fields.batteryLevel = -1
+                fields.lastBatteryLevel = -1
+                fields.charging = false
+                if (root.pingError !== null && root.pingError.deviceId === dev.deviceId)
+                    root.pingError = null
+            }
             // The daemon drops an unpaired device's notifications.
             root.refreshNotifications()
         }

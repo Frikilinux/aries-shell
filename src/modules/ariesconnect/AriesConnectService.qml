@@ -8,44 +8,58 @@ import Quickshell.Io
 // Client for the `aries-connect` daemon (KDE Connect phone bridge) over the
 // session bus. Quickshell ships no generic D-Bus client, so this keeps one
 // `busctl monitor` process for the signals and fires `busctl call` invocations
-// for the methods. Contract: aries-connect-ipc.md (no properties, `s` args).
+// for the methods.
 //
-// Initial sync follows the spec: subscribe to the signals first (monitor
-// running), then call `Devices()` and `ActiveNotifications()` — otherwise an
-// event arriving between a query and the subscription would be lost.
+// The daemon exposes two kinds of objects (see its doc/dbus.md):
+//   - the service object `/dev/zotta/AriesConnect`: pairing prompt, the
+//     `Devices()` / `ActiveNotifications()` snapshots and ObjectManager;
+//   - one object per known device under `/dev/zotta/AriesConnect/Device/<id>`
+//     with `DeviceId`/`DeviceName`/`DeviceType`/`Paired`/`Connected`/`Plugins`
+//     properties and the device actions + signals.
+// The device table comes from `GetManagedObjects()` (canonical) and is kept
+// live with `PropertiesChanged`, `InterfacesAdded`/`InterfacesRemoved` and the
+// device signals. Object paths are never built by hand: the daemon sanitizes
+// the id for the path, so the raw id comes from the `DeviceId` property.
 Singleton {
     id: root
 
     readonly property string busName: "dev.zotta.AriesConnect"
     readonly property string objectPath: "/dev/zotta/AriesConnect"
     readonly property string iface: "dev.zotta.AriesConnect"
+    readonly property string deviceIface: "dev.zotta.AriesConnect.Device"
+    readonly property string devicePathPrefix: "/dev/zotta/AriesConnect/Device/"
+    readonly property string propertiesIface: "org.freedesktop.DBus.Properties"
+    readonly property string objectManagerIface: "org.freedesktop.DBus.ObjectManager"
 
-    // Every device heard of this session:
-    //   { deviceId, name, paired, connected, request, unpairing, pingEnabled }
+    // Every device known to the daemon, mirroring its device objects:
+    //   { deviceId, path, name, type, paired, connected, request, unpairing,
+    //     pingEnabled }
+    // `path` = the object path announced by the daemon ("" while a pairing
+    // request arrives for a device whose object is not registered yet),
     // `request` = a pairing request is pending (backend gives it 30 s),
     // `unpairing` = an `Unpair` call is in flight,
-    // `pingEnabled` = last `PluginEnabled(id, "kdeconnect.ping")` reply
-    // (null until queried; unknown devices count as disabled).
+    // `pingEnabled` = `Plugins["kdeconnect.ping"]` (the plugin map always lists
+    // every implemented plugin, so a missing key means "not implemented").
     property var devices: []
 
-    // A `Devices()` call succeeded: the daemon is up on the bus.
+    // A `GetManagedObjects()` call succeeded: the daemon is up on the bus.
     property bool available: false
     // First `ActiveNotifications()` reply arrived: later changes are live and
     // get toasted by the notification server (the startup snapshot doesn't).
     property bool synced: false
-    // Last rejection reason ("" = none), e.g. "timeout" / "cancelled".
+    // Last rejection reason ("" = none), e.g. "rejected or timed out".
     property string lastRejectReason: ""
 
-    // Last `PingDevice` failure: { deviceId, text } or null. The backend
-    // reports unpaired / plugin disabled / no active channel as a D-Bus error.
+    // Last `Ping` failure: { deviceId, text } or null. The backend reports
+    // unpaired / plugin disabled / no active channel as a D-Bus error.
     property var pingError: null
-
-    // Queue of device ids waiting for a `PluginEnabled(..., "kdeconnect.ping")`
-    // reply (one call at a time; see queryPlugins()).
-    property var pluginQueue: []
 
     // The phone pinged us (popup/toast surfaces it).
     signal pingReceived(string deviceId, string name, string message)
+
+    // A phone asked to pair (toasted; the popup keeps the decision block).
+    // Emitted once per request, not for the repeats of the same id.
+    signal pairingRequest(string deviceId, string name)
 
     // Notifications mirrored from the phones, oldest first (backend order:
     // phone timestamp for `ActiveNotifications()`, reception for signals):
@@ -94,9 +108,30 @@ Singleton {
         return dev.deviceId
     }
 
+    function deviceById(deviceId) {
+        for (let i = 0; i < root.devices.length; i++) {
+            if (root.devices[i].deviceId === deviceId)
+                return root.devices[i]
+        }
+        return null
+    }
+
+    function deviceByPath(path) {
+        for (let i = 0; i < root.devices.length; i++) {
+            if (root.devices[i].path === path)
+                return root.devices[i]
+        }
+        return null
+    }
+
+    function deviceLabelById(deviceId) {
+        const dev = root.deviceById(deviceId)
+        return dev !== null ? root.deviceLabel(dev) : deviceId
+    }
+
     // Copy-on-write patch of one device; the array is always replaced so
     // bindings reading `devices` re-evaluate. Missing ids are appended, so a
-    // signal arriving for an unseen device (daemon restart) still lands.
+    // signal arriving for an unseen device still lands.
     function patch(id, fields, name) {
         const list = root.devices.slice()
         let index = -1
@@ -108,12 +143,14 @@ Singleton {
         }
         const dev = index === -1 ? {
             "deviceId": id,
+            "path": "",
             "name": "",
+            "type": "",
             "paired": false,
             "connected": false,
             "request": false,
             "unpairing": false,
-            "pingEnabled": null
+            "pingEnabled": false
         } : Object.assign({}, list[index])
         Object.assign(dev, fields)
         if (name !== undefined && name !== "")
@@ -126,164 +163,154 @@ Singleton {
         return dev
     }
 
-    // Re-read devices + notifications (popup open / monitor restart).
+    // Re-read the device table + notifications (popup open / monitor restart).
     function refresh() {
-        if (!devicesProcess.running)
-            devicesProcess.running = true
+        if (!managedProcess.running)
+            managedProcess.running = true
+        root.refreshNotifications()
+    }
+
+    function refreshNotifications() {
         if (!notificationsProcess.running)
             notificationsProcess.running = true
     }
 
-    // Coalesced refresh: link churn and rejected pairings are the only hints
-    // the daemon gives for changes it does not signal (a phone-side unpair
-    // arrives as `PairingRejected("peer unpaired")`, and Android replaces its
-    // socket often), so they are followed by an authoritative query.
+    // Coalesced refresh: used when a signal points at a device object that is
+    // not mirrored yet (the ObjectManager says nothing about objects that
+    // already existed when its own path was registered).
     function scheduleRefresh() {
         refreshTimer.restart()
     }
 
     function acceptPairing(deviceId) {
-        root.invoke("AcceptPairing", ["s", deviceId])
+        root.invoke(root.objectPath, root.iface, "AcceptPairing", ["s", deviceId])
     }
 
     function rejectPairing(deviceId) {
-        root.invoke("RejectPairing", ["s", deviceId])
+        root.invoke(root.objectPath, root.iface, "RejectPairing", ["s", deviceId])
     }
 
-    // The row disappears when the backend emits NotificationDismissed.
+    // The row disappears when the device emits `NotificationDismissed`.
     function dismissNotification(deviceId, notificationId) {
-        root.invoke("DismissNotification", ["ss", deviceId, notificationId])
+        const dev = root.deviceById(deviceId)
+        if (dev === null || dev.path === "")
+            return
+        root.invoke(dev.path, root.deviceIface, "DismissNotification", ["s", notificationId])
     }
 
-    // Forget the pairing (KDE Connect "unpair"). `PairingRemoved` moves the
-    // device out of the popup; `unpairing` only locks the row until the backend
-    // answers.
+    // Forget the pairing. `Unpair()` is a device method; the object stays and
+    // only flips `Paired` to false (`PropertiesChanged`), which removes the row
+    // from the popup. `unpairing` only locks the button meanwhile.
     function unpair(deviceId) {
+        const dev = root.deviceById(deviceId)
+        if (dev === null || dev.path === "")
+            return
         root.patch(deviceId, {
             "unpairing": true
         })
-        root.invoke("Unpair", ["s", deviceId])
+        // Own process: a second click must not clobber the call in flight (a
+        // failed `Unpair` re-enables the button right away).
+        unpairProcess.deviceId = deviceId
+        unpairProcess.command = ["busctl", "--user", "call", root.busName, dev.path, root.deviceIface, "Unpair"]
+        unpairProcess.running = true
         unpairTimeout.restart()
     }
 
-    // Desktop -> phone ping. Only meaningful when the device is paired,
-    // connected and the plugin is on (the popup enforces it); failures are
-    // reported by the backend as D-Bus errors and surfaced in `pingError`.
+    // Desktop -> phone ping (`Ping(message)` on the device object). Only
+    // meaningful when the device is paired, connected and the plugin is on
+    // (the popup enforces it); failures are D-Bus errors surfaced in
+    // `pingError`.
     function ping(deviceId) {
+        const dev = root.deviceById(deviceId)
+        if (dev === null || dev.path === "")
+            return
         root.pingError = null
         pingProcess.deviceId = deviceId
-        pingProcess.command = ["busctl", "--user", "call", root.busName, root.objectPath, root.iface, "PingDevice", "ss", deviceId, ""]
+        pingProcess.command = ["busctl", "--user", "call", root.busName, dev.path, root.deviceIface, "Ping", "s", ""]
         pingProcess.running = true
     }
 
-    // `kdeconnect.ping` state for one device, straight from the backend.
-    function queryPlugin(deviceId) {
-        if (deviceId === "")
-            return
-        root.pluginQueue = root.pluginQueue.concat([deviceId])
-        root.runPluginQuery()
-    }
-
-    function queryPlugins() {
-        const ids = []
-        for (let i = 0; i < root.devices.length; i++)
-            ids.push(root.devices[i].deviceId)
-        root.pluginQueue = ids
-        root.runPluginQuery()
-    }
-
-    function runPluginQuery() {
-        if (pluginProcess.running || root.pluginQueue.length === 0)
-            return
-        const queue = root.pluginQueue.slice()
-        const deviceId = queue.shift()
-        root.pluginQueue = queue
-        pluginProcess.deviceId = deviceId
-        pluginProcess.command = ["busctl", "--user", "--json=short", "call", root.busName, root.objectPath, root.iface, "PluginEnabled", "ss", deviceId, "kdeconnect.ping"]
-        pluginProcess.running = true
-    }
-
-    // Patch only if the device is still known: a reply arriving after
-    // `PairingRemoved` must not resurrect it.
-    function setPingEnabled(deviceId, enabled) {
-        const list = root.devices.slice()
-        for (let i = 0; i < list.length; i++) {
-            if (list[i].deviceId !== deviceId)
-                continue
-            if (list[i].pingEnabled === enabled)
-                return
-            list[i] = Object.assign({}, list[i], {
-                "pingEnabled": enabled
-            })
-            root.devices = list
-            return
-        }
-    }
-
-    function deviceLabelById(deviceId) {
-        for (let i = 0; i < root.devices.length; i++) {
-            if (root.devices[i].deviceId === deviceId)
-                return root.deviceLabel(root.devices[i])
-        }
-        return deviceId
-    }
-
-    function invoke(method, args) {
-        action.command = ["busctl", "--user", "call", root.busName, root.objectPath, root.iface, method].concat(args)
+    function invoke(path, ifaceName, method, args) {
+        action.command = ["busctl", "--user", "call", root.busName, path, ifaceName, method].concat(args)
         action.running = true
     }
 
-    // `a(ssbb)` reply: data[0] = [[deviceId, name, paired, connected], ...].
-    // The reply is authoritative: the daemon emits nothing when a phone
-    // unpairs or when it restarts with an empty trust store, so a device
-    // missing here was forgotten and must be dropped. Only pending pairing
-    // requests survive from local state (they are signal-only).
-    function applyDevices(text) {
-        let rows
+    // Unwrap a `{ Type: { type, data } }` property map into plain values.
+    function propValue(props, name) {
+        if (props === null || props === undefined)
+            return undefined
+        const entry = props[name]
+        if (entry === null || entry === undefined || typeof entry !== "object")
+            return undefined
+        return entry.data
+    }
+
+    function pluginEnabled(props, plugin) {
+        const plugins = root.propValue(props, "Plugins")
+        if (plugins === null || plugins === undefined || typeof plugins !== "object")
+            return false
+        return plugins[plugin] === true
+    }
+
+    // Build one model entry from a device object path + its property map.
+    // Local-only state (`request`, `unpairing`) is carried over; a paired
+    // device has no pending request and no unpair in flight.
+    function deviceFromProps(path, props, previous) {
+        const id = root.propValue(props, "DeviceId")
+        if (typeof id !== "string" || id === "")
+            return null
+        const old = previous[id]
+        const paired = root.propValue(props, "Paired") === true
+        return {
+            "deviceId": id,
+            "path": String(path),
+            "name": root.propValue(props, "DeviceName") || "",
+            "type": root.propValue(props, "DeviceType") || "",
+            "paired": paired,
+            "connected": root.propValue(props, "Connected") === true,
+            "request": old !== undefined && old.request === true && !paired,
+            "unpairing": old !== undefined && old.unpairing === true && paired,
+            "pingEnabled": root.pluginEnabled(props, "kdeconnect.ping")
+        }
+    }
+
+    // `a{oa{sa{sv}}}` reply: data[0] = { "<path>": { "<iface>": { "<prop>":
+    // { type, data } } } }. The reply is authoritative: a device missing from
+    // it was forgotten (daemon restart with an empty trust store) and must be
+    // dropped. Only pending pairing requests survive from local state (they are
+    // signal-only and may arrive before the object exists).
+    function applyManagedObjects(text) {
+        let objects
         try {
-            rows = JSON.parse(text).data[0]
+            objects = JSON.parse(text).data[0]
         } catch (e) {
             return
         }
-        if (!Array.isArray(rows))
+        if (objects === null || typeof objects !== "object")
             return
-        // Preserve per-device local state (`pingEnabled`) across reconciles.
         const previous = {}
         for (let i = 0; i < root.devices.length; i++)
             previous[root.devices[i].deviceId] = root.devices[i]
-        const list = root.devices.filter(d => d.request === true).map(d => Object.assign({}, d))
-        for (let r = 0; r < rows.length; r++) {
-            const row = rows[r]
-            if (!Array.isArray(row) || row.length < 4)
+
+        const list = []
+        for (const path in objects) {
+            const ifaces = objects[path]
+            if (ifaces === null || typeof ifaces !== "object")
                 continue
-            let index = -1
-            for (let i = 0; i < list.length; i++) {
-                if (list[i].deviceId === row[0]) {
-                    index = i
-                    break
-                }
-            }
-            const known = previous[row[0]]
-            const prev = index === -1 ? {
-                "deviceId": row[0],
-                "name": "",
-                "paired": false,
-                "connected": false,
-                "request": false,
-                "unpairing": false,
-                "pingEnabled": known !== undefined ? known.pingEnabled : null
-            } : list[index]
-            const dev = Object.assign({}, prev, {
-                "paired": row[2] === true,
-                "connected": row[3] === true
-            })
-            if (row[1] !== "")
-                dev.name = row[1]
-            if (index === -1)
+            const props = ifaces[root.deviceIface]
+            if (props === undefined || props === null || typeof props !== "object")
+                continue
+            const dev = root.deviceFromProps(path, props, previous)
+            if (dev !== null)
                 list.push(dev)
-            else
-                list[index] = dev
         }
+        for (let i = 0; i < root.devices.length; i++) {
+            const old = root.devices[i]
+            if (old.request !== true || root.deviceByIdIn(list, old.deviceId) !== null)
+                continue
+            list.push(Object.assign({}, old))
+        }
+
         // Notifications of forgotten devices are gone on the daemon side too;
         // `ActiveNotifications()` confirms it, this keeps the mirror coherent
         // even if that reply is late.
@@ -294,8 +321,14 @@ Singleton {
         if (notes.length !== root.notifications.length)
             root.notifications = notes
         root.devices = list
-        // Ping plugin state is per device and not part of `Devices()`.
-        root.queryPlugins()
+    }
+
+    function deviceByIdIn(list, deviceId) {
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].deviceId === deviceId)
+                return list[i]
+        }
+        return null
     }
 
     // `a(sssss)` reply: data[0] = [[deviceId, notificationId, appName,
@@ -325,17 +358,18 @@ Singleton {
         root.notifications = list
     }
 
-    // Updates reuse the same id: replace by (deviceId, notificationId)
-    // instead of duplicating; new ones append in reception order.
-    function upsertNotification(data) {
-        if (data.length < 5)
+    // `NotificationReceived(id, appName, title, text)` on a device object.
+    // Updates reuse the same id: replace by (deviceId, notificationId) instead
+    // of duplicating; new ones append in reception order.
+    function upsertNotification(deviceId, data) {
+        if (data.length < 4)
             return
         const entry = {
-            "deviceId": String(data[0]),
-            "notificationId": String(data[1]),
-            "appName": String(data[2]),
-            "title": String(data[3]),
-            "text": String(data[4])
+            "deviceId": deviceId,
+            "notificationId": String(data[0]),
+            "appName": String(data[1]),
+            "title": String(data[2]),
+            "text": String(data[3])
         }
         const list = root.notifications.slice()
         for (let i = 0; i < list.length; i++) {
@@ -355,8 +389,8 @@ Singleton {
             root.notifications = list
     }
 
-    // One `busctl monitor --json=short` line (a D-Bus message, not a signal
-    // necessarily: our own calls and replies are matched too).
+    // One `busctl monitor --json=short` line (a D-Bus message, not necessarily
+    // a signal: our own calls and replies are matched too).
     function handleLine(line) {
         if (line === "")
             return
@@ -368,30 +402,47 @@ Singleton {
         }
         if (msg.type !== "signal")
             return
-        // The daemon coming or going is invisible on its own interface (no
-        // "daemon stopped"/"unpaired" event), so the well-known name is
-        // watched too: a restart must not leave the old table on screen.
+        const path = String(msg.path || "")
+        const data = msg.payload !== null && msg.payload !== undefined && Array.isArray(msg.payload.data) ? msg.payload.data : []
+
+        // The daemon coming or going is invisible on its own interfaces, so
+        // the well-known name is watched too: a restart must not leave the old
+        // table on screen.
         if (msg.interface === "org.freedesktop.DBus" && msg.member === "NameOwnerChanged") {
-            const data = msg.payload && Array.isArray(msg.payload.data) ? msg.payload.data : []
             if (data.length >= 3 && String(data[0]) === root.busName)
                 root.handleDaemonOwner(String(data[2]))
             return
         }
-        if (msg.interface !== root.iface)
+
+        // Everything else must come from the daemon's object subtree (the
+        // Properties and ObjectManager match rules are session-wide).
+        if (path !== root.objectPath && path.indexOf(root.devicePathPrefix) !== 0)
             return
-        root.handleSignal(msg.member, msg.payload && Array.isArray(msg.payload.data) ? msg.payload.data : [])
+        if (path === root.objectPath) {
+            if (msg.interface === root.iface)
+                root.handleServiceSignal(msg.member, data)
+            else if (msg.interface === root.objectManagerIface)
+                root.handleObjectManager(msg.member, data)
+            return
+        }
+
+        if (msg.interface === root.propertiesIface && msg.member === "PropertiesChanged")
+            root.handlePropertiesChanged(path, data)
+        else if (msg.interface === root.deviceIface)
+            root.handleDeviceSignal(path, msg.member, data)
     }
 
     // `newOwner` is empty when the daemon left the session bus. A restarting
-    // daemon starts from an empty table (notifications are not persisted), so
-    // the mirror is dropped and rebuilt from the next initial sync.
+    // daemon starts with an empty trust store, so the mirror is dropped and
+    // rebuilt from the next initial sync.
     function handleDaemonOwner(newOwner) {
         root.synced = false
         root.lastRejectReason = ""
         root.devices = []
         root.notifications = []
         root.pingError = null
-        root.pluginQueue = []
+        requestTimeout.stop()
+        unpairTimeout.stop()
         if (newOwner === "") {
             root.available = false
             return
@@ -399,82 +450,129 @@ Singleton {
         root.refresh()
     }
 
-    function handleSignal(member, data) {
-        if (data.length === 0)
-            return
+    // Service object signals: the pairing prompt is service-wide.
+    function handleServiceSignal(member, data) {
         switch (member) {
-        case "DeviceSeen":
-            // May repeat on every announce; refresh name/visibility only.
-            root.patch(String(data[0]), {}, String(data[1]))
-            break
-        case "Connected":
-            root.available = true
-            root.patch(String(data[0]), {
-                "connected": true,
-                "unpairing": false
-            })
-            break
-        case "Disconnected":
-            root.patch(String(data[0]), {
-                "connected": false,
-                "unpairing": false
-            })
-            root.scheduleRefresh()
-            break
         case "PairingRequested":
+            if (data.length < 2)
+                return
             root.available = true
+            const known = root.deviceById(String(data[0]))
+            const isNew = known === null || known.request !== true
             root.patch(String(data[0]), {
                 "request": true
             }, String(data[1]))
-            // Backend window is 30 s; the matching PairingRejected normally
-            // clears the flag first. The timer only drops a request whose
-            // signal was missed (daemon restart).
+            // Backend window is 30 s; a decision shows up as `Paired` on the
+            // device object (accept) or as `PairingRejected`. The timer only
+            // drops a request whose outcome signal was missed.
             requestTimeout.restart()
-            break
-        case "PairingAccepted":
-            root.available = true
-            root.lastRejectReason = ""
-            root.patch(String(data[0]), {
-                "paired": true,
-                "connected": true,
-                "request": false,
-                "unpairing": false
-            })
-            root.queryPlugin(String(data[0]))
-            break
-        case "PairingRemoved":
-            // Unpaired from this desktop (`Unpair`) or another client: drop it
-            // from the UI right away, then reconcile.
-            root.devices = root.devices.filter(d => d.deviceId !== String(data[0]))
-            if (root.pingError !== null && root.pingError.deviceId === String(data[0]))
-                root.pingError = null
-            root.scheduleRefresh()
+            // One toast per request: the daemon may repeat the signal.
+            if (isNew)
+                root.pairingRequest(String(data[0]), String(data[1]))
             break
         case "PairingRejected":
-            root.lastRejectReason = String(data[1])
+            root.lastRejectReason = data.length > 1 ? String(data[1]) : ""
             root.patch(String(data[0]), {
                 "request": false
             })
-            // A phone-side unpair arrives as this signal; the table says
-            // whether the device is still paired.
+            break
+        }
+    }
+
+    // ObjectManager on the service path: devices appear and disappear with
+    // their object (registration is automatic for discovered devices).
+    function handleObjectManager(member, data) {
+        if (member === "InterfacesAdded") {
+            if (data.length < 2)
+                return
+            const path = String(data[0])
+            const ifaces = data[1]
+            if (ifaces === null || typeof ifaces !== "object")
+                return
+            const props = ifaces[root.deviceIface]
+            if (props === undefined || props === null || typeof props !== "object")
+                return
+            const previous = {}
+            for (let i = 0; i < root.devices.length; i++)
+                previous[root.devices[i].deviceId] = root.devices[i]
+            const dev = root.deviceFromProps(path, props, previous)
+            if (dev === null)
+                return
+            const list = root.devices.filter(d => d.deviceId !== dev.deviceId)
+            list.push(dev)
+            root.devices = list
+            return
+        }
+        if (member === "InterfacesRemoved") {
+            if (data.length < 2 || !Array.isArray(data[1]) || data[1].indexOf(root.deviceIface) === -1)
+                return
+            const dev = root.deviceByPath(String(data[0]))
+            if (dev === null)
+                return
+            root.devices = root.devices.filter(d => d.deviceId !== dev.deviceId)
+            root.notifications = root.notifications.filter(n => n.deviceId !== dev.deviceId)
+        }
+    }
+
+    // `PropertiesChanged(iface, changed, invalidated)` on a device object.
+    function handlePropertiesChanged(path, data) {
+        if (data.length < 2 || String(data[0]) !== root.deviceIface)
+            return
+        const changed = data[1]
+        if (changed === null || typeof changed !== "object")
+            return
+        const dev = root.deviceByPath(path)
+        if (dev === null) {
+            // Device object registered before our last sync (or before the
+            // monitor started): re-read the table.
             root.scheduleRefresh()
-            break
-        case "NotificationReceived":
-            root.available = true
-            root.upsertNotification(data)
-            break
-        case "NotificationDismissed":
-            root.removeNotification(String(data[0]), String(data[1]))
-            break
+            return
+        }
+
+        const fields = {}
+        if ("DeviceName" in changed)
+            fields.name = root.propValue(changed, "DeviceName") || ""
+        if ("DeviceType" in changed)
+            fields.type = root.propValue(changed, "DeviceType") || ""
+        if ("Connected" in changed)
+            fields.connected = root.propValue(changed, "Connected") === true
+        if ("Paired" in changed) {
+            const paired = root.propValue(changed, "Paired") === true
+            fields.paired = paired
+            fields.unpairing = false
+            if (paired)
+                fields.request = false
+            else if (root.pingError !== null && root.pingError.deviceId === dev.deviceId)
+                root.pingError = null
+            // The daemon drops an unpaired device's notifications.
+            root.refreshNotifications()
+        }
+        if ("Plugins" in changed) {
+            fields.pingEnabled = root.pluginEnabled(changed, "kdeconnect.ping")
+            // Notifications may have been dropped (plugin disabled).
+            root.refreshNotifications()
+        }
+        root.patch(dev.deviceId, fields)
+    }
+
+    // Device object signals; the device id comes from the path.
+    function handleDeviceSignal(path, member, data) {
+        const dev = root.deviceByPath(path)
+        if (dev === null) {
+            root.scheduleRefresh()
+            return
+        }
+        switch (member) {
         case "PingReceived":
             // The phone pinged us: surface it (toast + popup history) and let
             // the popup keep the message.
-            root.pingReceived(String(data[0]), root.deviceLabelById(String(data[0])), String(data[1]))
+            root.pingReceived(dev.deviceId, root.deviceLabel(dev), data.length > 0 ? String(data[0]) : "")
             break
-        case "PluginStateChanged":
-            // Only the ping plugin is shown for now; ignore the rest.
-            if (String(data[1]) === "kdeconnect.ping")
-                root.setPingEnabled(String(data[0]), data[2] === true)
+        case "NotificationReceived":
+            root.upsertNotification(dev.deviceId, data)
+            break
+        case "NotificationDismissed":
+            root.removeNotification(dev.deviceId, data.length > 0 ? String(data[0]) : "")
             break
         }
     }
@@ -493,18 +591,20 @@ Singleton {
         root.devices = list
     }
 
-    // A missed `PairingRemoved` (or an old backend without `Unpair`) must not
-    // leave the Unpair chip locked forever.
-    function clearUnpairing() {
+    // A missed `Paired` change (or a failed call) must not leave the Unpair
+    // button locked forever.
+    function clearUnpairing(deviceId) {
         const list = root.devices.slice()
         let changed = false
         for (let i = 0; i < list.length; i++) {
-            if (list[i].unpairing) {
-                list[i] = Object.assign({}, list[i], {
-                    "unpairing": false
-                })
-                changed = true
-            }
+            if (!list[i].unpairing)
+                continue
+            if (deviceId !== undefined && deviceId !== "" && list[i].deviceId !== deviceId)
+                continue
+            list[i] = Object.assign({}, list[i], {
+                "unpairing": false
+            })
+            changed = true
         }
         if (changed)
             root.devices = list
@@ -512,15 +612,16 @@ Singleton {
 
     Component.onCompleted: monitor.running = true
 
-    // Persistent signal subscription. The match rule is on the interface, not
-    // the name, so it survives a daemon restart.
+    // Persistent signal subscription. The match rules are on interfaces /
+    // paths, not on the sender, so they survive a daemon restart.
     Process {
         id: monitor
 
-        // Two rules: the daemon's signals plus ownership changes of its
-        // well-known name (see handleDaemonOwner). The interface rule (not the
-        // sender) keeps working across a daemon restart.
-        command: ["busctl", "--user", "monitor", "--json=short", "--match", "interface=" + root.iface, "--match", "interface=org.freedesktop.DBus,member=NameOwnerChanged,arg0='" + root.busName + "'"]
+        // Service signals + device signals + property/object changes in the
+        // service subtree + ownership changes of the well-known name (see
+        // handleDaemonOwner). `path_namespace` keeps session-wide
+        // PropertiesChanged traffic out of the stream.
+        command: ["busctl", "--user", "monitor", "--json=short", "--match", "interface=" + root.iface, "--match", "interface=" + root.deviceIface, "--match", "interface=" + root.propertiesIface + ",path_namespace=" + root.objectPath, "--match", "interface=" + root.objectManagerIface, "--match", "interface=org.freedesktop.DBus,member=NameOwnerChanged,arg0='" + root.busName + "'"]
 
         stdout: SplitParser {
             onRead: line => root.handleLine(line)
@@ -550,7 +651,7 @@ Singleton {
         onTriggered: root.clearRequests()
     }
 
-    // Upper bound for the `PairingRemoved` reply to an `Unpair` call.
+    // Upper bound for the `Paired` change answering an `Unpair` call.
     Timer {
         id: unpairTimeout
         interval: 8000
@@ -567,13 +668,14 @@ Singleton {
         onTriggered: root.refresh()
     }
 
+    // `a{oa{sa{sv}}}`: the canonical device table (paths + properties).
     Process {
-        id: devicesProcess
+        id: managedProcess
 
-        command: ["busctl", "--user", "--json=short", "call", root.busName, root.objectPath, root.iface, "Devices"]
+        command: ["busctl", "--user", "--json=short", "call", root.busName, root.objectPath, root.objectManagerIface, "GetManagedObjects"]
 
         stdout: StdioCollector {
-            onStreamFinished: root.applyDevices(text)
+            onStreamFinished: root.applyManagedObjects(text)
         }
 
         onExited: function (exitCode) {
@@ -598,30 +700,8 @@ Singleton {
         }
     }
 
-    // `PluginEnabled(id, "kdeconnect.ping")` replies, serialized (one call at a
-    // time): `{"type":"b","data":[true]}`.
-    Process {
-        id: pluginProcess
-        property string deviceId: ""
-
-        stdout: StdioCollector {
-            onStreamFinished: {
-                let value
-                try {
-                    value = JSON.parse(text).data[0]
-                } catch (e) {
-                    return
-                }
-                if (typeof value === "boolean")
-                    root.setPingEnabled(pluginProcess.deviceId, value)
-            }
-        }
-
-        onExited: root.runPluginQuery()
-    }
-
-    // `PingDevice` reports "not paired" / "plugin disabled" / "no active
-    // channel" as a D-Bus error: keep the message for the popup.
+    // `Ping` reports "not paired" / "plugin disabled" / "no active channel" as
+    // a D-Bus error: keep the message for the popup.
     Process {
         id: pingProcess
         property string deviceId: ""
@@ -644,14 +724,20 @@ Singleton {
         }
     }
 
+    // `Unpair` answers with a `Paired` change, not a reply: a failed call
+    // (daemon gone, unknown object) re-enables the button instead of waiting
+    // for the timeout.
     Process {
-        id: action
+        id: unpairProcess
+        property string deviceId: ""
 
-        // Failed call (daemon gone, or an older backend without `Unpair`):
-        // re-enable the action instead of waiting for the timeout.
         onExited: function (exitCode) {
             if (exitCode !== 0)
-                root.clearUnpairing()
+                root.clearUnpairing(unpairProcess.deviceId)
         }
+    }
+
+    Process {
+        id: action
     }
 }

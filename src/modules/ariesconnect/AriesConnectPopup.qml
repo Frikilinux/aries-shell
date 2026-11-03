@@ -195,7 +195,7 @@ BarPopup {
         id: deviceRow
         required property var modelData
         readonly property bool connected: modelData.connected === true
-        // An `Unpair` call is in flight until `PairingRemoved` answers.
+        // An `Unpair` call is in flight until `Paired` flips to false.
         readonly property bool unpairing: modelData.unpairing === true
         // `null` = not queried yet; treat it as disabled (backend default for
         // unknown/unpaired devices).

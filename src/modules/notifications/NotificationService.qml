@@ -675,6 +675,11 @@ Singleton {
         function onPingReceived(deviceId, name, message) {
             root.showLocal("Aries Connect", name !== "" ? name : deviceId, message !== "" ? message : "Ping")
         }
+
+        // A phone asked to pair: the prompt needs an answer within 30 s.
+        function onPairingRequest(deviceId, name) {
+            root.showLocal("Aries Connect", "Pairing request", (name !== "" ? name : deviceId) + " wants to pair")
+        }
     }
 
     // Create the cache directory before the first read/write.

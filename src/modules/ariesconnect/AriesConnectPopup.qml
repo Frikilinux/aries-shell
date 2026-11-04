@@ -9,14 +9,25 @@ import "../widgets"
 
 // Paired devices known to the `aries-connect` daemon, each with an `Unpair`
 // action. A pending pairing request gets its own Accept / Reject block (the
-// backend cancels it after 30 s and reports the reason). Phone notifications
-// mirrored by the daemon follow, newest first, each dismissable.
+// backend cancels it after 30 s and reports the reason). Device notifications
+// are mirrored by the daemon per phone: one card per device (network-popup
+// style) and only the selected card expands its notifications under it, at
+// most `maxNotifRows` before that list scrolls while the card stays put.
 BarPopup {
     id: popup
 
-    popupWidth: 320
+    popupWidth: 380
+    // Never taller than 75% of the screen height (same as the network popup).
+    maxContentHeight: popup.screen ? Math.round(popup.screen.height * 0.75) : 540
 
     readonly property var request: AriesConnectService.request
+
+    // Card background shared with the network popup (foreground tint).
+    readonly property color devHeaderBgColor: Qt.rgba(Theme.fgBarColor.r, Theme.fgBarColor.g, Theme.fgBarColor.b, 0.07)
+
+    // Accordion: `null` = no explicit choice yet (the first device with
+    // notifications opens), `""` = every card folded, else the device id.
+    property var expandedDevice: null
 
     // Paired devices only: connected first, then name. `connected` alone is not
     // a criterion (an unpaired device can keep a link after a phone-side unpair).
@@ -32,8 +43,49 @@ BarPopup {
         return list
     }
 
-    // Backend order is oldest first; the popup shows the newest on top.
-    readonly property var notificationList: AriesConnectService.notifications.slice().reverse()
+    // Expanded card. The explicit choice wins while it still exists; otherwise
+    // the first device with notifications, else the first device.
+    readonly property string expandedId: {
+        if (popup.expandedDevice !== null) {
+            const chosen = String(popup.expandedDevice)
+            if (chosen === "")
+                return ""
+            if (popup.pairedList.some(d => d.deviceId === chosen))
+                return chosen
+        }
+        const withNotes = popup.pairedList.find(d => AriesConnectService.notifications.some(n => n.deviceId === d.deviceId))
+        if (withNotes !== undefined)
+            return withNotes.deviceId
+        return popup.pairedList.length > 0 ? popup.pairedList[0].deviceId : ""
+    }
+
+    // Notification list scrolling: at most `maxNotifRows` rows fit, beyond that
+    // the device's list scrolls (the card header does not move).
+    readonly property int maxNotifRows: 5
+    readonly property int notifRowHeight: 60
+    readonly property int notifRowSpacing: 2
+
+    // Header click: open this device, or fold it when it is already open.
+    function toggleDevice(deviceId) {
+        popup.expandedDevice = popup.expandedId === deviceId ? "" : deviceId
+    }
+
+    // Newest first (the backend keeps them oldest first).
+    function notificationsOf(deviceId) {
+        const list = AriesConnectService.notifications.filter(n => n.deviceId === deviceId)
+        list.reverse()
+        return list
+    }
+
+    function notificationCountOf(deviceId) {
+        return AriesConnectService.notifications.filter(n => n.deviceId === deviceId).length
+    }
+
+    function notificationLabel(count) {
+        if (count === 0)
+            return "No notifications"
+        return count === 1 ? "1 notification" : count + " notifications"
+    }
 
     // The daemon may have (re)started while the popup was closed.
     function popupOpened() {
@@ -189,12 +241,14 @@ BarPopup {
         }
     }
 
-    // One paired device: big phone glyph, name with the last reported battery
-    // on the right, and the quick actions on the line under it (right aligned).
-    // Ping and clipboard need a live link and their plugin on (disabled
-    // otherwise, no explanatory text).
-    component DeviceRow: Rectangle {
-        id: deviceRow
+    // One paired device (network-popup card style): big phone glyph, name with
+    // the last reported battery on the right, then the notification count on
+    // the left and the quick actions on the right. Clicking the card (outside
+    // the buttons) opens / folds this device's notifications. Ping and
+    // clipboard need a live link and their plugin on (disabled otherwise, no
+    // explanatory text).
+    component DeviceCard: Rectangle {
+        id: deviceCard
         required property var modelData
         readonly property bool connected: modelData.connected === true
         // An `Unpair` call is in flight until `Paired` flips to false.
@@ -202,27 +256,36 @@ BarPopup {
         // `null` = not queried yet; treat it as disabled (backend default for
         // unknown/unpaired devices).
         readonly property bool pingEnabled: modelData.pingEnabled === true
-        readonly property bool pingReady: deviceRow.connected && deviceRow.pingEnabled
+        readonly property bool pingReady: deviceCard.connected && deviceCard.pingEnabled
         readonly property bool clipboardEnabled: modelData.clipboardEnabled === true
-        readonly property bool clipboardReady: deviceRow.connected && deviceRow.clipboardEnabled
-        readonly property string actionErrorText: AriesConnectService.actionError !== null && AriesConnectService.actionError.deviceId === deviceRow.modelData.deviceId ? AriesConnectService.actionError.text : ""
+        readonly property bool clipboardReady: deviceCard.connected && deviceCard.clipboardEnabled
+        readonly property string actionErrorText: AriesConnectService.actionError !== null && AriesConnectService.actionError.deviceId === deviceCard.modelData.deviceId ? AriesConnectService.actionError.text : ""
         // Charge to show: the current report, or the last one seen while the
         // phone is offline (the daemon clears `BatteryLevel` when the control
         // channel closes, so the stale value is cached here).
         readonly property int batteryLevel: modelData.batteryLevel >= 0 ? modelData.batteryLevel : modelData.lastBatteryLevel
-        readonly property bool batteryKnown: deviceRow.batteryLevel >= 0
+        readonly property bool batteryKnown: deviceCard.batteryLevel >= 0
         // Only a connected device with a live report gets the bright
         // indicator; a cached value is dimmed.
-        readonly property bool batteryCurrent: deviceRow.connected && modelData.batteryLevel >= 0
+        readonly property bool batteryCurrent: deviceCard.connected && modelData.batteryLevel >= 0
         readonly property bool charging: modelData.charging === true
         width: popup.contentWidth
         // Content + 6 px padding top/bottom: the quick-action button must not
-        // sit against the row's tinted edge (the name/action stack is taller
-        // than the glyph).
-        height: Math.max(48, deviceColumn.implicitHeight + 12)
+        // sit against the card's edge (the name/action stack is taller than the
+        // glyph).
+        height: Math.max(48, cardColumn.implicitHeight + 12)
         radius: 6
-        color: deviceRow.connected ? Theme.bgColorHover : "transparent"
-        // color: deviceRow.connected ? Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.12) : "transparent"
+        color: popup.devHeaderBgColor
+        border.width: 1
+        border.color: Theme.borderColorRest
+
+        // Card click (accordion). Declared first so the quick actions above it
+        // win their own clicks.
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: popup.toggleDevice(deviceCard.modelData.deviceId)
+        }
 
         Row {
             anchors.fill: parent
@@ -235,13 +298,13 @@ BarPopup {
                 width: 27
                 horizontalAlignment: Text.AlignHCenter
                 glyph: "\ue033" // phone
-                color: deviceRow.connected ? Theme.accentColor : Theme.fgColor
-                opacity: deviceRow.connected ? 1 : 0.6
+                color: deviceCard.connected ? Theme.accentColor : Theme.fgColor
+                opacity: deviceCard.connected ? 1 : 0.6
                 font.pixelSize: 30
             }
 
             Column {
-                id: deviceColumn
+                id: cardColumn
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width - 27 - parent.spacing
                 spacing: 3
@@ -255,10 +318,10 @@ BarPopup {
                     Text {
                         id: nameText
                         anchors.left: parent.left
-                        anchors.right: deviceRow.batteryKnown ? batteryGroup.left : parent.right
-                        anchors.rightMargin: deviceRow.batteryKnown ? 6 : 0
+                        anchors.right: deviceCard.batteryKnown ? batteryGroup.left : parent.right
+                        anchors.rightMargin: deviceCard.batteryKnown ? 6 : 0
                         anchors.verticalCenter: parent.verticalCenter
-                        text: AriesConnectService.deviceLabel(deviceRow.modelData)
+                        text: AriesConnectService.deviceLabel(deviceCard.modelData)
                         color: Theme.fgColor
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSize
@@ -273,17 +336,17 @@ BarPopup {
                         id: batteryGroup
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        visible: deviceRow.batteryKnown
+                        visible: deviceCard.batteryKnown
                         width: batteryIcon.implicitWidth + 6 + batteryText.implicitWidth
                         height: Math.max(batteryIcon.implicitHeight, batteryText.implicitHeight)
-                        opacity: deviceRow.batteryCurrent ? 1 : 0.5
+                        opacity: deviceCard.batteryCurrent ? 1 : 0.5
 
                         Icon {
                             id: batteryIcon
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            glyph: BatteryService.batteryLevelGlyph(deviceRow.batteryLevel, deviceRow.charging)
-                            color: deviceRow.batteryCurrent ? Theme.accentColor : Theme.fgColorMuted
+                            glyph: BatteryService.batteryLevelGlyph(deviceCard.batteryLevel, deviceCard.charging)
+                            color: Theme.fgColorMuted
                             font.pixelSize: Theme.fontSize * 1.2
                         }
 
@@ -291,7 +354,7 @@ BarPopup {
                             id: batteryText
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
-                            text: Math.round(deviceRow.batteryLevel) + "%"
+                            text: Math.round(deviceCard.batteryLevel) + "%"
                             color: Theme.fgColorMuted
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSize - 3
@@ -299,10 +362,22 @@ BarPopup {
                     }
                 }
 
-                // Quick actions, right aligned.
+                // Notification count (left) + quick actions (right).
                 Item {
                     width: parent.width
                     height: actionsRow.implicitHeight
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.right: actionsRow.left
+                        anchors.rightMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: popup.notificationLabel(popup.notificationCountOf(deviceCard.modelData.deviceId))
+                        color: Theme.fgColorMuted
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize - 4
+                        elide: Text.ElideRight
+                    }
 
                     Row {
                         id: actionsRow
@@ -312,31 +387,31 @@ BarPopup {
 
                         QuickAction {
                             glyph: "\ue090" // clipboard
-                            enabled: deviceRow.clipboardReady
-                            onClicked: AriesConnectService.sendClipboard(deviceRow.modelData.deviceId)
+                            enabled: deviceCard.clipboardReady
+                            onClicked: AriesConnectService.sendClipboard(deviceCard.modelData.deviceId)
                         }
 
                         QuickAction {
                             glyph: "\ue091" // megaphone-loud
-                            enabled: deviceRow.pingReady
-                            onClicked: AriesConnectService.ping(deviceRow.modelData.deviceId)
+                            enabled: deviceCard.pingReady
+                            onClicked: AriesConnectService.ping(deviceCard.modelData.deviceId)
                         }
 
                         QuickAction {
                             glyph: "\ue08e" // phone-subtract
                             background: Theme.urgencyCriticalColor
                             hoverBackground: Qt.lighter(Theme.urgencyCriticalColor, 1.15)
-                            enabled: !deviceRow.unpairing
-                            onClicked: AriesConnectService.unpair(deviceRow.modelData.deviceId)
+                            enabled: !deviceCard.unpairing
+                            onClicked: AriesConnectService.unpair(deviceCard.modelData.deviceId)
                         }
                     }
                 }
 
                 // Backend error for the last action (D-Bus message, verbatim).
                 Text {
-                    visible: deviceRow.actionErrorText !== ""
+                    visible: deviceCard.actionErrorText !== ""
                     width: parent.width
-                    text: deviceRow.actionErrorText
+                    text: deviceCard.actionErrorText
                     color: Theme.urgencyCriticalColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSize - 3
@@ -346,33 +421,18 @@ BarPopup {
         }
     }
 
-    Repeater {
-        model: popup.pairedList
-        delegate: DeviceRow {}
-    }
-
-    // Phone notifications mirrored by the daemon, newest first.
-    Text {
-        visible: AriesConnectService.notificationCount > 0
-        width: parent.width
-        topPadding: 4
-        text: "Notifications"
-        color: Theme.fgColorMuted
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSize - 4
-        font.bold: true
-    }
-
+    // Phone notification mirrored by the daemon: app, title and text on one
+    // line each (newlines flattened), dismiss icon on the app line. Hover
+    // highlight only; the row itself is not clickable (dismissing from an
+    // accidental click would be destructive).
     component NotificationRow: Rectangle {
         id: notificationRow
         required property var modelData
         width: popup.contentWidth
-        implicitHeight: notificationColumn.implicitHeight + 16
+        height: popup.notifRowHeight
         radius: 6
         color: notificationMouse.containsMouse ? Theme.bgColorHover : "transparent"
 
-        // Hover highlight only; the row itself is not clickable (dismissing
-        // from an accidental click would be destructive).
         MouseArea {
             id: notificationMouse
             anchors.fill: parent
@@ -441,8 +501,45 @@ BarPopup {
         }
     }
 
+    // One section per paired device: the card, then its notifications (newest
+    // first) while it is the expanded one.
     Repeater {
-        model: popup.notificationList
-        delegate: NotificationRow {}
+        model: popup.pairedList
+
+        delegate: Column {
+            id: section
+            required property var modelData
+            readonly property bool open: popup.expandedId === section.modelData.deviceId
+            readonly property var notes: popup.notificationsOf(section.modelData.deviceId)
+            width: popup.contentWidth
+            spacing: 4
+
+            DeviceCard {
+                modelData: section.modelData
+            }
+
+            Flickable {
+                id: notesFlick
+                visible: section.open && section.notes.length > 0
+                width: parent.width
+                height: Math.min(notesColumn.implicitHeight, popup.maxNotifRows * popup.notifRowHeight + popup.notifRowSpacing * (popup.maxNotifRows - 1))
+                contentWidth: width
+                contentHeight: notesColumn.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+                Column {
+                    id: notesColumn
+                    width: parent.width
+                    spacing: popup.notifRowSpacing
+
+                    Repeater {
+                        model: section.notes
+
+                        delegate: NotificationRow {}
+                    }
+                }
+            }
+        }
     }
 }

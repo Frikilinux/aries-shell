@@ -676,6 +676,13 @@ Singleton {
             root.showLocal("Aries Connect", name !== "" ? name : deviceId, message !== "" ? message : "Ping")
         }
 
+        // The phone clipboard was applied to the local clipboard. The toast
+        // must not echo the copied text (neither in the summary nor the body),
+        // so nothing private ends up in the notification history.
+        function onClipboardReceived(deviceId, name) {
+            root.showLocal("Aries Connect", "Clipboard", (name !== "" ? name : deviceId) + " updated the clipboard")
+        }
+
         // A phone asked to pair: the prompt needs an answer within 30 s.
         function onPairingRequest(deviceId, name) {
             root.showLocal("Aries Connect", "Pairing request", (name !== "" ? name : deviceId) + " wants to pair")

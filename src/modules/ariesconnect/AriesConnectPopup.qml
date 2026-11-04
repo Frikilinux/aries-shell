@@ -40,9 +40,9 @@ BarPopup {
         AriesConnectService.refresh()
     }
 
-    // Ping errors belong to one attempt: don't keep them across opens.
+    // Action errors belong to one attempt: don't keep them across opens.
     function popupClosed() {
-        AriesConnectService.pingError = null
+        AriesConnectService.actionError = null
     }
 
     // Header: title + close
@@ -158,8 +158,8 @@ BarPopup {
     component QuickAction: Rectangle {
         id: actionButton
         property string glyph: ""
-        property color background: Qt.darker(Theme.bgColor, 1.1)
-        property color hoverBackground: Qt.lighter(Theme.bgBarColor, 2)
+        property color background: Theme.bgColor
+        property color hoverBackground: Qt.lighter(Theme.bgColorHover, 1.15)
         property color foreground: Theme.fgColor
         signal clicked
 
@@ -191,8 +191,8 @@ BarPopup {
 
     // One paired device: big phone glyph, name with the last reported battery
     // on the right, and the quick actions on the line under it (right aligned).
-    // Ping needs a live link and the plugin on (disabled otherwise, no
-    // explanatory text).
+    // Ping and clipboard need a live link and their plugin on (disabled
+    // otherwise, no explanatory text).
     component DeviceRow: Rectangle {
         id: deviceRow
         required property var modelData
@@ -203,7 +203,9 @@ BarPopup {
         // unknown/unpaired devices).
         readonly property bool pingEnabled: modelData.pingEnabled === true
         readonly property bool pingReady: deviceRow.connected && deviceRow.pingEnabled
-        readonly property string pingErrorText: AriesConnectService.pingError !== null && AriesConnectService.pingError.deviceId === deviceRow.modelData.deviceId ? AriesConnectService.pingError.text : ""
+        readonly property bool clipboardEnabled: modelData.clipboardEnabled === true
+        readonly property bool clipboardReady: deviceRow.connected && deviceRow.clipboardEnabled
+        readonly property string actionErrorText: AriesConnectService.actionError !== null && AriesConnectService.actionError.deviceId === deviceRow.modelData.deviceId ? AriesConnectService.actionError.text : ""
         // Charge to show: the current report, or the last one seen while the
         // phone is offline (the daemon clears `BatteryLevel` when the control
         // channel closes, so the stale value is cached here).
@@ -309,7 +311,13 @@ BarPopup {
                         spacing: 8
 
                         QuickAction {
-                            glyph: "\ue08f" // send
+                            glyph: "\ue090" // clipboard
+                            enabled: deviceRow.clipboardReady
+                            onClicked: AriesConnectService.sendClipboard(deviceRow.modelData.deviceId)
+                        }
+
+                        QuickAction {
+                            glyph: "\ue091" // megaphone-loud
                             enabled: deviceRow.pingReady
                             onClicked: AriesConnectService.ping(deviceRow.modelData.deviceId)
                         }
@@ -324,11 +332,11 @@ BarPopup {
                     }
                 }
 
-                // Backend error for the last ping (D-Bus message, verbatim).
+                // Backend error for the last action (D-Bus message, verbatim).
                 Text {
-                    visible: deviceRow.pingErrorText !== ""
+                    visible: deviceRow.actionErrorText !== ""
                     width: parent.width
-                    text: deviceRow.pingErrorText
+                    text: deviceRow.actionErrorText
                     color: Theme.urgencyCriticalColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSize - 3

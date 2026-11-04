@@ -33,13 +33,15 @@ Singleton {
 
     // Every device known to the daemon, mirroring its device objects:
     //   { deviceId, path, name, type, paired, connected, request, unpairing,
-    //     pingEnabled, batteryLevel, lastBatteryLevel, charging }
+    //     pingEnabled, clipboardEnabled, batteryLevel, lastBatteryLevel,
+    //     charging }
     // `path` = the object path announced by the daemon ("" while a pairing
     // request arrives for a device whose object is not registered yet),
     // `request` = a pairing request is pending (backend gives it 30 s),
     // `unpairing` = an `Unpair` call is in flight,
     // `pingEnabled` = `Plugins["kdeconnect.ping"]` (the plugin map always lists
     // every implemented plugin, so a missing key means "not implemented"),
+    // `clipboardEnabled` = `Plugins["kdeconnect.clipboard"]`,
     // `batteryLevel` = charge 0..100 as currently reported, `-1` when unknown
     // (no report yet, no battery, plugin disabled, unpaired or offline: the
     // daemon drops the cached value when the control channel closes),
@@ -57,9 +59,21 @@ Singleton {
     // Last rejection reason ("" = none), e.g. "rejected or timed out".
     property string lastRejectReason: ""
 
-    // Last `Ping` failure: { deviceId, text } or null. The backend reports
-    // unpaired / plugin disabled / no active channel as a D-Bus error.
-    property var pingError: null
+    // Last action failure: { deviceId, text } or null. `Ping` and
+    // `SendClipboard` report unpaired / plugin disabled / no active channel as
+    // a D-Bus error; the popup renders it under the row.
+    property var actionError: null
+
+    // Local clipboard timestamp (ms) for the `clipboard.connect` handshake:
+    // set when this desktop writes the clipboard (our own send or an applied
+    // phone update). A `ClipboardReceived` with a phone timestamp older than
+    // this must not overwrite the newer local clipboard.
+    property double clipboardTimestamp: 0
+
+    // The phone clipboard was written to the local clipboard (toasted). The
+    // content is deliberately NOT part of the signal: it must not leak into the
+    // notification surface or its persisted history.
+    signal clipboardReceived(string deviceId, string name)
 
     // The phone pinged us (popup/toast surfaces it).
     signal pingReceived(string deviceId, string name, string message)
@@ -158,6 +172,7 @@ Singleton {
             "request": false,
             "unpairing": false,
             "pingEnabled": false,
+            "clipboardEnabled": false,
             "batteryLevel": -1,
             "lastBatteryLevel": -1,
             "charging": false
@@ -229,15 +244,60 @@ Singleton {
     // Desktop -> phone ping (`Ping(message)` on the device object). Only
     // meaningful when the device is paired, connected and the plugin is on
     // (the popup enforces it); failures are D-Bus errors surfaced in
-    // `pingError`.
+    // `actionError`.
     function ping(deviceId) {
         const dev = root.deviceById(deviceId)
         if (dev === null || dev.path === "")
             return
-        root.pingError = null
+        root.actionError = null
         pingProcess.deviceId = deviceId
         pingProcess.command = ["busctl", "--user", "call", root.busName, dev.path, root.deviceIface, "Ping", "s", ""]
         pingProcess.running = true
+    }
+
+    // Desktop -> phone clipboard. The daemon only relays packets: the local
+    // clipboard is read here with `wl-paste` and sent with `SendClipboard`
+    // (text only, empty ignored, backend limit 1 MiB). The button is gated on
+    // paired + connected + `kdeconnect.clipboard`.
+    function sendClipboard(deviceId) {
+        const dev = root.deviceById(deviceId)
+        if (dev === null || dev.path === "")
+            return
+        root.actionError = null
+        // Separate process per action: a second click must not clobber the read
+        // or the call in flight.
+        clipboardRead.deviceId = deviceId
+        clipboardRead.command = ["wl-paste", "--no-newline"]
+        clipboardRead.running = true
+    }
+
+    // Phone -> desktop clipboard. The daemon emits `ClipboardReceived(content,
+    // timestamp)`; the client owns the clipboard, so write it with `wl-copy`.
+    // `timestamp` is 0 for regular updates and the phone's clipboard timestamp
+    // for `clipboard.connect`: an older handshake must not clobber a newer
+    // local clipboard (the daemon does not arbitrate). Returns whether the
+    // local clipboard was updated.
+    function applyClipboard(content, timestamp) {
+        if (content === "")
+            return false
+        const ts = Number(timestamp)
+        if (ts > 0) {
+            if (ts <= root.clipboardTimestamp)
+                return false
+            root.clipboardTimestamp = ts
+        }
+        clipboardWrite.command = ["wl-copy", "--", content]
+        clipboardWrite.running = true
+        return true
+    }
+
+    // Strip the `Call failed: ` prefix busctl adds to D-Bus errors.
+    function callErrorText(text) {
+        let message = String(text || "").trim()
+        const prefix = "Call failed: "
+        if (message.indexOf(prefix) === 0)
+            message = message.slice(prefix.length)
+        return message
     }
 
     function invoke(path, ifaceName, method, args) {
@@ -283,6 +343,7 @@ Singleton {
             "request": old !== undefined && old.request === true && !paired,
             "unpairing": old !== undefined && old.unpairing === true && paired,
             "pingEnabled": root.pluginEnabled(props, "kdeconnect.ping"),
+            "clipboardEnabled": root.pluginEnabled(props, "kdeconnect.clipboard"),
             "batteryLevel": current,
             // The daemon drops the level when the phone goes offline: keep the
             // last reported one locally so the popup can dim it instead of
@@ -464,7 +525,8 @@ Singleton {
         root.lastRejectReason = ""
         root.devices = []
         root.notifications = []
-        root.pingError = null
+        root.actionError = null
+        root.clipboardTimestamp = 0
         requestTimeout.stop()
         unpairTimeout.stop()
         if (newOwner === "") {
@@ -584,14 +646,15 @@ Singleton {
                 fields.batteryLevel = -1
                 fields.lastBatteryLevel = -1
                 fields.charging = false
-                if (root.pingError !== null && root.pingError.deviceId === dev.deviceId)
-                    root.pingError = null
+                if (root.actionError !== null && root.actionError.deviceId === dev.deviceId)
+                    root.actionError = null
             }
             // The daemon drops an unpaired device's notifications.
             root.refreshNotifications()
         }
         if ("Plugins" in changed) {
             fields.pingEnabled = root.pluginEnabled(changed, "kdeconnect.ping")
+            fields.clipboardEnabled = root.pluginEnabled(changed, "kdeconnect.clipboard")
             // Notifications may have been dropped (plugin disabled).
             root.refreshNotifications()
         }
@@ -610,6 +673,12 @@ Singleton {
             // The phone pinged us: surface it (toast + popup history) and let
             // the popup keep the message.
             root.pingReceived(dev.deviceId, root.deviceLabel(dev), data.length > 0 ? String(data[0]) : "")
+            break
+        case "ClipboardReceived":
+            // The phone clipboard changed: write it to the local clipboard and
+            // toast it (without the copied text) only when it was applied.
+            if (root.applyClipboard(data.length > 0 ? String(data[0]) : "", data.length > 1 ? data[1] : 0))
+                root.clipboardReceived(dev.deviceId, root.deviceLabel(dev))
             break
         case "NotificationReceived":
             root.upsertNotification(dev.deviceId, data)
@@ -756,14 +825,73 @@ Singleton {
         onExited: function (exitCode) {
             if (exitCode === 0)
                 return
-            let text = String(pingStderr.text || "").trim()
-            const prefix = "Call failed: "
-            if (text.indexOf(prefix) === 0)
-                text = text.slice(prefix.length)
-            root.pingError = {
+            const text = root.callErrorText(pingStderr.text)
+            root.actionError = {
                 "deviceId": pingProcess.deviceId,
                 "text": text !== "" ? text : "Ping failed"
             }
+        }
+    }
+
+    // Local clipboard read for `sendClipboard()`. `wl-paste` exits non-zero
+    // with "Nothing is copied" when the selection has no text; that is not an
+    // error worth surfacing, the row simply stays unchanged.
+    Process {
+        id: clipboardRead
+        property string deviceId: ""
+
+        stdout: StdioCollector {
+            id: clipboardReadOut
+        }
+
+        onExited: function (exitCode) {
+            if (exitCode !== 0)
+                return
+            // `--no-newline`: the text is sent exactly as copied.
+            const text = String(clipboardReadOut.text || "")
+            if (text === "")
+                return
+            const dev = root.deviceById(clipboardRead.deviceId)
+            if (dev === null || dev.path === "")
+                return
+            root.clipboardTimestamp = Date.now()
+            clipboardSend.deviceId = dev.deviceId
+            // `--` before `call`: clipboard text may start with `-`, which
+            // busctl would otherwise parse as an option.
+            clipboardSend.command = ["busctl", "--user", "--", "call", root.busName, dev.path, root.deviceIface, "SendClipboard", "s", text]
+            clipboardSend.running = true
+        }
+    }
+
+    // `SendClipboard` fails for unpaired/disabled/offline devices or text over
+    // 1 MiB: same error surface as `Ping`.
+    Process {
+        id: clipboardSend
+        property string deviceId: ""
+
+        stderr: StdioCollector {
+            id: clipboardSendStderr
+        }
+
+        onExited: function (exitCode) {
+            if (exitCode === 0)
+                return
+            const text = root.callErrorText(clipboardSendStderr.text)
+            root.actionError = {
+                "deviceId": clipboardSend.deviceId,
+                "text": text !== "" ? text : "Clipboard send failed"
+            }
+        }
+    }
+
+    // Phone clipboard -> local clipboard. `wl-copy` forks and serves the
+    // selection in the background, so the process exits immediately.
+    Process {
+        id: clipboardWrite
+
+        onExited: function (exitCode) {
+            if (exitCode !== 0)
+                console.warn("ariesconnect: wl-copy failed, clipboard not updated")
         }
     }
 

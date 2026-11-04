@@ -113,6 +113,11 @@ Singleton {
 
     readonly property int notificationCount: root.notifications.length
 
+    // Pending `DismissNotification` clicks: the call owns one process, so a
+    // second click while one is in flight waits instead of overwriting its
+    // command (which would silently drop it).
+    property var dismissQueue: []
+
     // Pending pairing request (popup shows Accept / Reject for it).
     readonly property var request: {
         for (let i = 0; i < root.devices.length; i++) {
@@ -269,12 +274,35 @@ Singleton {
         root.invoke(root.objectPath, root.iface, "RejectPairing", ["s", deviceId])
     }
 
-    // The row disappears when the device emits `NotificationDismissed`.
+    // The row disappears when the device emits `NotificationDismissed`. The
+    // call itself can fail ("device is not paired", "plugin disabled",
+    // "notification is not active"): the error is logged, and an inactive id
+    // also drops the local row, because the daemon already discarded it (cap
+    // eviction, plugin off, phone-side cancel) and no signal is coming for it.
     function dismissNotification(deviceId, notificationId) {
         const dev = root.deviceById(deviceId)
         if (dev === null || dev.path === "")
             return
-        root.invoke(dev.path, root.deviceIface, "DismissNotification", ["s", notificationId])
+        root.dismissQueue = root.dismissQueue.concat([
+            {
+                "deviceId": deviceId,
+                "notificationId": notificationId,
+                "path": dev.path
+            }
+        ])
+        root.pumpDismiss()
+    }
+
+    // One dismiss call at a time, in click order.
+    function pumpDismiss() {
+        if (dismissProcess.running || root.dismissQueue.length === 0)
+            return
+        const next = root.dismissQueue[0]
+        root.dismissQueue = root.dismissQueue.slice(1)
+        dismissProcess.deviceId = next.deviceId
+        dismissProcess.notificationId = next.notificationId
+        dismissProcess.command = ["busctl", "--user", "call", root.busName, next.path, root.deviceIface, "DismissNotification", "s", next.notificationId]
+        dismissProcess.running = true
     }
 
     // Forget the pairing. `Unpair()` is a device method; the object stays and
@@ -590,6 +618,8 @@ Singleton {
         root.notifications = []
         root.actionError = null
         root.clipboardTimestamp = 0
+        // Clicks aimed at the previous owner are meaningless now.
+        root.dismissQueue = []
         // Snapshots started against the previous owner are worthless now.
         root.devicesEpoch = root.devicesEpoch + 1
         root.notificationsEpoch = root.notificationsEpoch + 1
@@ -950,6 +980,33 @@ Singleton {
             root.syncing = false
             // The retry bumps `syncToken`, which invalidates the killed call.
             root.refresh()
+        }
+    }
+
+    // `DismissNotification` fails for unpaired devices, inactive notifications
+    // and a disabled plugin. Failures are not part of `actionError`: the row
+    // is the feedback and the signal removes it. An inactive id is dropped
+    // locally instead (the daemon already discarded it, so its
+    // `NotificationDismissed` was sent before the click and will not repeat).
+    Process {
+        id: dismissProcess
+        property string deviceId: ""
+        property string notificationId: ""
+
+        stderr: StdioCollector {
+            id: dismissStderr
+        }
+
+        onExited: function (exitCode) {
+            if (exitCode !== 0) {
+                const text = root.callErrorText(dismissStderr.text)
+                if (text.indexOf("is not active") !== -1)
+                    root.removeNotification(dismissProcess.deviceId, dismissProcess.notificationId)
+                console.warn("ariesconnect: dismiss failed: " + (text !== "" ? text : "unknown error"))
+            }
+            // Deferred: the next call must not start while this QProcess is
+            // still being torn down.
+            Qt.callLater(root.pumpDismiss)
         }
     }
 

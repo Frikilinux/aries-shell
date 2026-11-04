@@ -20,6 +20,13 @@ import Quickshell.Io
 // live with `PropertiesChanged`, `InterfacesAdded`/`InterfacesRemoved` and the
 // device signals. Object paths are never built by hand: the daemon sanitizes
 // the id for the path, so the raw id comes from the `DeviceId` property.
+//
+// Snapshots are serialized: one call at a time, table first and notifications
+// second, so the table is authoritative before the notification mirror is
+// replaced. Both steps are guarded by their own dirty flag (a request made
+// while one is in flight is re-run instead of dropped) and by an epoch
+// (a reply older than a signal handled meanwhile is discarded, because the
+// daemon snapshots it took would undo newer live state).
 Singleton {
     id: root
 
@@ -53,9 +60,25 @@ Singleton {
 
     // A `GetManagedObjects()` call succeeded: the daemon is up on the bus.
     property bool available: false
-    // First `ActiveNotifications()` reply arrived: later changes are live and
-    // get toasted by the notification server (the startup snapshot doesn't).
+    // First `ActiveNotifications()` reply was applied: later changes are live
+    // and get toasted by the notification server (the startup snapshot
+    // doesn't).
     property bool synced: false
+
+    // Snapshot pipeline (see the file header). `syncing` = one `busctl call`
+    // of the chain is in flight; the dirty flags are consumed when their step
+    // starts and set again by any request made while it runs. The epochs are
+    // bumped by the live updates the snapshots would overwrite, so a reply
+    // that started before them is discarded instead of applied.
+    property bool syncing: false
+    property bool devicesDirty: false
+    property bool notificationsDirty: false
+    property int devicesEpoch: 0
+    property int notificationsEpoch: 0
+    // Identifies the call that owns `syncing`: a timed-out process that is
+    // killed and replaced exits later with an old token and must not advance
+    // the chain (that would overlap it with the retry).
+    property int syncToken: 0
     // Last rejection reason ("" = none), e.g. "rejected or timed out".
     property string lastRejectReason: ""
 
@@ -189,15 +212,46 @@ Singleton {
     }
 
     // Re-read the device table + notifications (popup open / monitor restart).
+    // Both are only marked: `pumpSync()` serializes them, table first.
     function refresh() {
-        if (!managedProcess.running)
-            managedProcess.running = true
-        root.refreshNotifications()
+        root.devicesDirty = true
+        root.notificationsDirty = true
+        root.pumpSync()
     }
 
+    // Notifications alone (unpair / plugin change: the table itself did not
+    // change). The request is never dropped: if a step is in flight this flag
+    // makes the chain run again when it finishes.
     function refreshNotifications() {
-        if (!notificationsProcess.running)
+        root.notificationsDirty = true
+        root.pumpSync()
+    }
+
+    // One snapshot step at a time: `GetManagedObjects()` before
+    // `ActiveNotifications()` (the table is what prunes the mirror).
+    function pumpSync() {
+        if (root.syncing)
+            return
+        if (root.devicesDirty) {
+            root.devicesDirty = false
+            root.syncing = true
+            root.syncToken = root.syncToken + 1
+            devicesProcess.startEpoch = root.devicesEpoch
+            devicesProcess.running = true
+            return
+        }
+        if (root.notificationsDirty) {
+            root.notificationsDirty = false
+            root.syncing = true
+            root.syncToken = root.syncToken + 1
+            notificationsProcess.startEpoch = root.notificationsEpoch
             notificationsProcess.running = true
+        }
+    }
+
+    function snapshotDone() {
+        root.syncing = false
+        root.pumpSync()
     }
 
     // Coalesced refresh: used when a signal points at a device object that is
@@ -417,20 +471,28 @@ Singleton {
     }
 
     // `a(sssss)` reply: data[0] = [[deviceId, notificationId, appName,
-    // title, text], ...]. Authoritative snapshot: replaces the mirror.
+    // title, text], ...]. Authoritative snapshot: replaces the mirror. Rows of
+    // devices missing from the table are skipped (the table was applied just
+    // before, so they cannot belong to a live device). Returns false when the
+    // reply could not be used, so the caller keeps `synced` off.
     function applyNotifications(text) {
         let rows
         try {
             rows = JSON.parse(text).data[0]
         } catch (e) {
-            return
+            return false
         }
         if (!Array.isArray(rows))
-            return
+            return false
+        const known = {}
+        for (let i = 0; i < root.devices.length; i++)
+            known[root.devices[i].deviceId] = true
         const list = []
         for (let r = 0; r < rows.length; r++) {
             const row = rows[r]
             if (!Array.isArray(row) || row.length < 5)
+                continue
+            if (known[String(row[0])] !== true)
                 continue
             list.push({
                 "deviceId": String(row[0]),
@@ -441,6 +503,7 @@ Singleton {
             })
         }
         root.notifications = list
+        return true
     }
 
     // `NotificationReceived(id, appName, title, text)` on a device object.
@@ -527,10 +590,15 @@ Singleton {
         root.notifications = []
         root.actionError = null
         root.clipboardTimestamp = 0
+        // Snapshots started against the previous owner are worthless now.
+        root.devicesEpoch = root.devicesEpoch + 1
+        root.notificationsEpoch = root.notificationsEpoch + 1
         requestTimeout.stop()
         unpairTimeout.stop()
         if (newOwner === "") {
             root.available = false
+            root.devicesDirty = false
+            root.notificationsDirty = false
             return
         }
         root.refresh()
@@ -578,6 +646,9 @@ Singleton {
             const props = ifaces[root.deviceIface]
             if (props === undefined || props === null || typeof props !== "object")
                 return
+            // A table snapshot in flight may predate this object: discard it
+            // instead of dropping the device.
+            root.devicesEpoch = root.devicesEpoch + 1
             const previous = {}
             for (let i = 0; i < root.devices.length; i++)
                 previous[root.devices[i].deviceId] = root.devices[i]
@@ -595,6 +666,8 @@ Singleton {
             const dev = root.deviceByPath(String(data[0]))
             if (dev === null)
                 return
+            root.devicesEpoch = root.devicesEpoch + 1
+            root.notificationsEpoch = root.notificationsEpoch + 1
             root.devices = root.devices.filter(d => d.deviceId !== dev.deviceId)
             root.notifications = root.notifications.filter(n => n.deviceId !== dev.deviceId)
         }
@@ -616,6 +689,8 @@ Singleton {
         }
 
         const fields = {}
+        // Any live property change makes a table snapshot in flight stale.
+        root.devicesEpoch = root.devicesEpoch + 1
         if ("DeviceName" in changed)
             fields.name = root.propValue(changed, "DeviceName") || ""
         if ("DeviceType" in changed)
@@ -649,13 +724,16 @@ Singleton {
                 if (root.actionError !== null && root.actionError.deviceId === dev.deviceId)
                     root.actionError = null
             }
-            // The daemon drops an unpaired device's notifications.
+            // The daemon drops an unpaired device's notifications: a snapshot
+            // in flight may still carry them.
+            root.notificationsEpoch = root.notificationsEpoch + 1
             root.refreshNotifications()
         }
         if ("Plugins" in changed) {
             fields.pingEnabled = root.pluginEnabled(changed, "kdeconnect.ping")
             fields.clipboardEnabled = root.pluginEnabled(changed, "kdeconnect.clipboard")
             // Notifications may have been dropped (plugin disabled).
+            root.notificationsEpoch = root.notificationsEpoch + 1
             root.refreshNotifications()
         }
         root.patch(dev.deviceId, fields)
@@ -681,9 +759,11 @@ Singleton {
                 root.clipboardReceived(dev.deviceId, root.deviceLabel(dev))
             break
         case "NotificationReceived":
+            root.notificationsEpoch = root.notificationsEpoch + 1
             root.upsertNotification(dev.deviceId, data)
             break
         case "NotificationDismissed":
+            root.notificationsEpoch = root.notificationsEpoch + 1
             root.removeNotification(dev.deviceId, data.length > 0 ? String(data[0]) : "")
             break
         }
@@ -780,35 +860,96 @@ Singleton {
         onTriggered: root.refresh()
     }
 
-    // `a{oa{sa{sv}}}`: the canonical device table (paths + properties).
+    // `a{oa{sa{sv}}}`: the canonical device table (paths + properties). The
+    // reply is applied in `onExited`: `StdioCollector` ends its stream before
+    // Quickshell emits `exited`, so the text is complete there.
     Process {
-        id: managedProcess
+        id: devicesProcess
+        property int startEpoch: 0
+        property int startToken: 0
 
         command: ["busctl", "--user", "--json=short", "call", root.busName, root.objectPath, root.objectManagerIface, "GetManagedObjects"]
 
         stdout: StdioCollector {
-            onStreamFinished: root.applyManagedObjects(text)
+            id: devicesOut
         }
 
+        // The token is taken when the process really starts, not when it is
+        // requested: a restart requested while a timed-out process is still
+        // terminating starts afterwards, and the old exit must not match.
+        onStarted: devicesProcess.startToken = root.syncToken
+
         onExited: function (exitCode) {
-            root.available = exitCode === 0
+            // Replaced after a timeout: this exit belongs to no step anymore.
+            if (devicesProcess.startToken !== root.syncToken)
+                return
+            if (exitCode === 0) {
+                root.available = true
+                // A signal handled while the call was in flight is newer than
+                // this reply, so applying the table would undo it: re-run.
+                if (devicesProcess.startEpoch === root.devicesEpoch)
+                    root.applyManagedObjects(devicesOut.text)
+                else
+                    root.devicesDirty = true
+            } else {
+                // No retry (a dead daemon would spin): the monitor restart and
+                // the next owner change ask for the sync again.
+                root.available = false
+            }
+            root.snapshotDone()
         }
     }
 
     Process {
         id: notificationsProcess
+        property int startEpoch: 0
+        property int startToken: 0
 
         command: ["busctl", "--user", "--json=short", "call", root.busName, root.objectPath, root.iface, "ActiveNotifications"]
 
         stdout: StdioCollector {
-            onStreamFinished: root.applyNotifications(text)
+            id: notificationsOut
         }
 
+        onStarted: notificationsProcess.startToken = root.syncToken
+
         onExited: function (exitCode) {
-            if (exitCode !== 0)
+            if (notificationsProcess.startToken !== root.syncToken)
                 return
+            if (exitCode !== 0) {
+                root.snapshotDone()
+                return
+            }
             root.available = true
-            root.synced = true
+            if (notificationsProcess.startEpoch !== root.notificationsEpoch) {
+                // Older than the live updates already applied: discard it (it
+                // would resurrect a dismissed notification or drop a new one)
+                // and ask for a fresh one.
+                root.notificationsDirty = true
+            } else if (root.applyNotifications(notificationsOut.text)) {
+                // Only an applied snapshot counts as the initial one: a
+                // discarded reply must not make the re-run toast as live.
+                root.synced = true
+            }
+            root.snapshotDone()
+        }
+    }
+
+    // A call that never reports an exit (busctl missing: a QProcess start
+    // failure emits no `finished`) must not block the chain forever. The token
+    // bump makes the killed process exit irrelevant; if nothing ever started
+    // (no exit at all) the retry is simply attempted again on the next tick.
+    Timer {
+        interval: 15000
+        running: root.syncing
+
+        onTriggered: {
+            console.warn("ariesconnect: snapshot timed out, retrying")
+            devicesProcess.running = false
+            notificationsProcess.running = false
+            root.syncing = false
+            // The retry bumps `syncToken`, which invalidates the killed call.
+            root.refresh()
         }
     }
 

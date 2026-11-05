@@ -87,6 +87,37 @@ BarPopup {
         return count === 1 ? "1 notification" : count + " notifications"
     }
 
+    // Cellular indicator from the connectivity report: bars for the coarse
+    // level plus the network generation as text. `cellular-data-N` glyphs are
+    // indexed here by level (fluent numbers the set the other way round:
+    // data-1 is the full five bars, data-5 the single bar).
+    readonly property var signalGlyphs: ["\ue096", "\ue095", "\ue094", "\ue093", "\ue092"]
+
+    function signalGlyph(level) {
+        const n = Number(level)
+        if (!(n >= 0))
+            return ""
+        return popup.signalGlyphs[Math.max(0, Math.min(4, Math.round(n)))]
+    }
+
+    // Coarse generation label next to the bars ("" when the phone does not
+    // report a technology we can name).
+    function signalLabel(type) {
+        const name = String(type || "").toUpperCase()
+        if (name === "" || name.indexOf("UNKNOWN") !== -1)
+            return ""
+        // Android reports NR for 5G.
+        if (name.indexOf("5G") !== -1 || name === "NR" || name === "NRNSA")
+            return "5G"
+        if (name.indexOf("LTE") !== -1 || name.indexOf("4G") !== -1)
+            return "4G"
+        if (name.indexOf("HSPA") !== -1 || name.indexOf("UMTS") !== -1 || name.indexOf("EVDO") !== -1)
+            return "3G"
+        if (name.indexOf("EDGE") !== -1 || name.indexOf("GPRS") !== -1 || name === "GSM" || name === "CDMA")
+            return "2G"
+        return ""
+    }
+
     // The daemon may have (re)started while the popup was closed.
     function popupOpened() {
         AriesConnectService.refresh()
@@ -269,6 +300,15 @@ BarPopup {
         // indicator; a cached value is dimmed.
         readonly property bool batteryCurrent: deviceCard.connected && modelData.batteryLevel >= 0
         readonly property bool charging: modelData.charging === true
+        // Cellular bars (coarse level) and generation label of the first
+        // subscription ("" = nothing to show). The daemon clears the values on
+        // disconnect and the phone only re-pushes on change, so the last
+        // report is kept dimmed instead of vanishing (same as the battery).
+        readonly property bool signalCurrent: modelData.signalType !== ""
+        readonly property string signalType: deviceCard.signalCurrent ? modelData.signalType : (modelData.lastSignalType || "")
+        readonly property int signalLevel: deviceCard.signalCurrent ? modelData.signalLevel : (typeof modelData.lastSignalLevel === "number" ? modelData.lastSignalLevel : -1)
+        readonly property string signalGlyph: popup.signalGlyph(deviceCard.signalLevel)
+        readonly property string signalText: popup.signalLabel(deviceCard.signalType)
         width: popup.contentWidth
         // Content + 6 px padding top/bottom: the quick-action button must not
         // sit against the card's edge (the name/action stack is taller than the
@@ -309,17 +349,18 @@ BarPopup {
                 width: parent.width - 27 - parent.spacing
                 spacing: 3
 
-                // Name line: name on the left, last reported battery on the
-                // right edge of the popup content (same margin as the actions).
+                // Name line: name on the left, then the status group on the
+                // right (the generation + bars, then the battery: percent and
+                // glyph rightmost).
                 Item {
                     width: parent.width
-                    height: Math.max(nameText.implicitHeight, batteryGroup.height)
+                    height: Math.max(nameText.implicitHeight, statusRow.height)
 
                     Text {
                         id: nameText
                         anchors.left: parent.left
-                        anchors.right: deviceCard.batteryKnown ? batteryGroup.left : parent.right
-                        anchors.rightMargin: deviceCard.batteryKnown ? 6 : 0
+                        anchors.right: statusRow.visible ? statusRow.left : parent.right
+                        anchors.rightMargin: statusRow.visible ? 6 : 0
                         anchors.verticalCenter: parent.verticalCenter
                         text: AriesConnectService.deviceLabel(deviceCard.modelData)
                         color: Theme.fgColor
@@ -328,36 +369,76 @@ BarPopup {
                         elide: Text.ElideRight
                     }
 
-                    // Battery icon + percentage, right aligned. Hidden when no
-                    // level was ever reported. While the phone is offline (or
-                    // the level is currently unknown) the last value is shown
-                    // dimmed, never as if it were live.
-                    Item {
-                        id: batteryGroup
+                    Row {
+                        id: statusRow
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        visible: deviceCard.batteryKnown
-                        width: batteryIcon.implicitWidth + 6 + batteryText.implicitWidth
-                        height: Math.max(batteryIcon.implicitHeight, batteryText.implicitHeight)
-                        opacity: deviceCard.batteryCurrent ? 1 : 0.5
+                        visible: deviceCard.batteryKnown || deviceCard.signalGlyph !== "" || deviceCard.signalText !== ""
+                        spacing: 8
 
-                        Icon {
-                            id: batteryIcon
-                            anchors.left: parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            glyph: BatteryService.batteryLevelGlyph(deviceCard.batteryLevel, deviceCard.charging)
-                            color: Theme.fgColorMuted
-                            font.pixelSize: Theme.fontSize * 1.2
+                        // Cellular signal from the connectivity report: the
+                        // generation as text (5G / 4G / 3G / 2G) then the bars
+                        // for the coarse level. Only while the daemon reports
+                        // it: plugin enabled, phone connected, one report.
+                        Row {
+                            height: batteryGroup.height
+                            // spacing: 1
+                            visible: deviceCard.signalGlyph !== "" || deviceCard.signalText !== ""
+                            // Dimmed when it is the last known report, never
+                            // live data (the phone has not re-pushed yet).
+                            opacity: deviceCard.signalCurrent ? 1 : 0.5
+
+                            Text {
+                                visible: deviceCard.signalText !== ""
+                                text: deviceCard.signalText
+                                color: Theme.fgColorMuted
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSize - 3
+                                // Same treatment as the battery text/icon: the
+                                // line box is centered, never a forced height.
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Icon {
+                                id: signalIcon
+                                visible: deviceCard.signalGlyph !== ""
+                                glyph: deviceCard.signalGlyph
+                                color: Theme.fgColorMuted
+                                anchors.verticalCenter: parent.verticalCenter
+                                font.pixelSize: Theme.fontSize * 1.1
+                            }
                         }
 
-                        Text {
-                            id: batteryText
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: Math.round(deviceCard.batteryLevel) + "%"
-                            color: Theme.fgColorMuted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSize - 3
+                        // Battery icon + percentage. Hidden when no level was
+                        // ever reported. While the phone is offline (or the
+                        // level is currently unknown) the last value is shown
+                        // dimmed, never as if it were live.
+                        Row {
+                            id: batteryGroup
+                            visible: deviceCard.batteryKnown
+                            width: batteryIcon.implicitWidth + 6 + batteryText.implicitWidth
+                            height: Math.max(batteryIcon.implicitHeight, batteryText.implicitHeight)
+                            opacity: deviceCard.batteryCurrent ? 1 : 0.5
+                            spacing: 6
+
+                            Text {
+                                id: batteryText
+                                // anchors.right: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Math.round(deviceCard.batteryLevel) + "%"
+                                color: Theme.fgColorMuted
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSize - 3
+                            }
+
+                            Icon {
+                                id: batteryIcon
+                                // anchors.left: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                glyph: BatteryService.batteryLevelGlyph(deviceCard.batteryLevel, deviceCard.charging)
+                                color: Theme.fgColorMuted
+                                font.pixelSize: Theme.fontSize * 1.2
+                            }
                         }
                     }
                 }

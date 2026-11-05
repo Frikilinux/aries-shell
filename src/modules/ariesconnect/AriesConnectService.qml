@@ -41,7 +41,7 @@ Singleton {
     // Every device known to the daemon, mirroring its device objects:
     //   { deviceId, path, name, type, paired, connected, request, unpairing,
     //     pingEnabled, clipboardEnabled, batteryLevel, lastBatteryLevel,
-    //     charging }
+    //     charging, signalType, signalLevel, lastSignalType, lastSignalLevel }
     // `path` = the object path announced by the daemon ("" while a pairing
     // request arrives for a device whose object is not registered yet),
     // `request` = a pairing request is pending (backend gives it 30 s),
@@ -55,7 +55,14 @@ Singleton {
     // `lastBatteryLevel` = last reported charge, kept locally so the popup can
     // still show it dimmed while the phone is offline (`-1` when never
     // reported),
-    // `charging` = the phone currently reports that it is plugged in.
+    // `charging` = the phone currently reports that it is plugged in,
+    // `signalType` = `SignalStrengths` (`a{s(si)}`, connectivity report) of the
+    // first subscription (id order): the reported technology (`LTE`, `5G`,
+    // `HSPA`...), `""` when unknown; `signalLevel` = its coarse level 0..4
+    // (`-1` when unknown). Both are cleared when the plugin is disabled, the
+    // device is unpaired or offline; `lastSignalType`/`lastSignalLevel` keep
+    // the last report locally so the popup can dim it instead of hiding the
+    // indicator (the phone only re-pushes on change).
     property var devices: []
 
     // A `GetManagedObjects()` call succeeded: the daemon is up on the bus.
@@ -415,6 +422,7 @@ Singleton {
         const paired = root.propValue(props, "Paired") === true
         const level = root.propValue(props, "BatteryLevel")
         const current = typeof level === "number" ? level : -1
+        const signal = root.signalOf(props)
         return {
             "deviceId": id,
             "path": String(path),
@@ -431,8 +439,43 @@ Singleton {
             // last reported one locally so the popup can dim it instead of
             // hiding the indicator.
             "lastBatteryLevel": current >= 0 ? current : root.lastBatteryOf(old),
-            "charging": root.propValue(props, "IsCharging") === true
+            "charging": root.propValue(props, "IsCharging") === true,
+            // Primitives on purpose: the popup is a Repeater delegate, and a
+            // nested object reaches `modelData` as a non-enumerable wrapper.
+            "signalType": signal === null ? "" : signal.type,
+            "signalLevel": signal === null ? -1 : signal.level,
+            // Last known report, kept across the daemon's clears (disconnect,
+            // plugin off): the phone only re-pushes on change, so without this
+            // the indicator would stay hidden for minutes after a reconnect.
+            "lastSignalType": signal !== null ? signal.type : oldSignalType(old),
+            "lastSignalLevel": signal !== null ? signal.level : oldSignalLevel(old)
         }
+    }
+
+    function oldSignalType(dev) {
+        return dev !== undefined && typeof dev.lastSignalType === "string" ? dev.lastSignalType : ""
+    }
+
+    function oldSignalLevel(dev) {
+        return dev !== undefined && typeof dev.lastSignalLevel === "number" ? dev.lastSignalLevel : -1
+    }
+
+    // `SignalStrengths` (`a{s(si)}`) -> { type, level } of the first
+    // subscription (ids are sorted by the daemon), or `null` when the map is
+    // absent/empty. busctl renders each struct as `[networkType, level]`.
+    function signalOf(props) {
+        const map = root.propValue(props, "SignalStrengths")
+        if (map === null || map === undefined || typeof map !== "object")
+            return null
+        for (const id in map) {
+            const entry = map[id]
+            if (Array.isArray(entry) && entry.length >= 2)
+                return {
+                    "type": String(entry[0]),
+                    "level": Number(entry[1])
+                }
+        }
+        return null
     }
 
     function lastBatteryOf(dev) {
@@ -739,6 +782,18 @@ Singleton {
         }
         if ("IsCharging" in changed)
             fields.charging = root.propValue(changed, "IsCharging") === true
+        // Connectivity report: the daemon announces and clears the map here
+        // (new report, disconnect, unpair, plugin toggled).
+        if ("SignalStrengths" in changed) {
+            const signal = root.signalOf(changed)
+            fields.signalType = signal === null ? "" : signal.type
+            fields.signalLevel = signal === null ? -1 : signal.level
+            // A clear keeps the cache; a new report refreshes it.
+            if (signal !== null) {
+                fields.lastSignalType = signal.type
+                fields.lastSignalLevel = signal.level
+            }
+        }
         if ("Paired" in changed) {
             const paired = root.propValue(changed, "Paired") === true
             fields.paired = paired
@@ -751,6 +806,10 @@ Singleton {
                 fields.batteryLevel = -1
                 fields.lastBatteryLevel = -1
                 fields.charging = false
+                fields.signalType = ""
+                fields.signalLevel = -1
+                fields.lastSignalType = ""
+                fields.lastSignalLevel = -1
                 if (root.actionError !== null && root.actionError.deviceId === dev.deviceId)
                     root.actionError = null
             }

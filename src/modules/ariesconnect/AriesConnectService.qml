@@ -40,8 +40,9 @@ Singleton {
 
     // Every device known to the daemon, mirroring its device objects:
     //   { deviceId, path, name, type, paired, connected, request, unpairing,
-    //     pingEnabled, clipboardEnabled, batteryLevel, lastBatteryLevel,
-    //     charging, signalType, signalLevel, lastSignalType, lastSignalLevel }
+    //     pingEnabled, clipboardEnabled, plugins, batteryLevel,
+    //     lastBatteryLevel, charging, signalType, signalLevel, lastSignalType,
+    //     lastSignalLevel }
     // `path` = the object path announced by the daemon ("" while a pairing
     // request arrives for a device whose object is not registered yet),
     // `request` = a pairing request is pending (backend gives it 30 s),
@@ -49,6 +50,8 @@ Singleton {
     // `pingEnabled` = `Plugins["kdeconnect.ping"]` (the plugin map always lists
     // every implemented plugin, so a missing key means "not implemented"),
     // `clipboardEnabled` = `Plugins["kdeconnect.clipboard"]`,
+    // `plugins` = the full `Plugins` map (`a{sb}`) for the settings window;
+    // the popup reads the flat flags above, never this nested map,
     // `batteryLevel` = charge 0..100 as currently reported, `-1` when unknown
     // (no report yet, no battery, plugin disabled, unpaired or offline: the
     // daemon drops the cached value when the control channel closes),
@@ -67,6 +70,19 @@ Singleton {
 
     // A `GetManagedObjects()` call succeeded: the daemon is up on the bus.
     property bool available: false
+
+    // Name the daemon announces to other devices (`DeviceName` on the service
+    // object). It defaults to the host name; `SetDeviceName` changes it. Read
+    // from the service object (not `GetManagedObjects`, which lists device
+    // objects) and keep it live with `PropertiesChanged`.
+    property string daemonName: ""
+
+    // Display fallback for the brief window before the first property read.
+    readonly property string daemonLabel: root.daemonName !== "" ? root.daemonName : "aries-connect"
+
+    // Last `SetDeviceName` failure ("" = none), shown in the settings window.
+    property string deviceNameError: ""
+
     // First `ActiveNotifications()` reply was applied: later changes are live
     // and get toasted by the notification server (the startup snapshot
     // doesn't).
@@ -93,6 +109,21 @@ Singleton {
     // `SendClipboard` report unpaired / plugin disabled / no active channel as
     // a D-Bus error; the popup renders it under the row.
     property var actionError: null
+
+    // Last `SetPluginEnabled` failure ("" = none), shown by the settings
+    // window. The switch state itself comes from `PropertiesChanged(Plugins)`,
+    // not from this call, so a failure only needs the message.
+    property string pluginToggleError: ""
+
+    // Whether the global settings window is open. The module is instantiated
+    // once per bar (per screen), but settings are not per screen: every gear
+    // flips this flag and a single window in shell.qml follows it.
+    property bool settingsVisible: false
+
+    // Output that asked for the settings window. The toplevel has no parent
+    // window, so this is how it lands on the monitor whose bar was clicked
+    // instead of a fixed default. Set before `settingsVisible`.
+    property string settingsOutput: ""
 
     // Local clipboard timestamp (ms) for the `clipboard.connect` handshake:
     // set when this desktop writes the clipboard (our own send or an applied
@@ -208,6 +239,7 @@ Singleton {
             "unpairing": false,
             "pingEnabled": false,
             "clipboardEnabled": false,
+            "plugins": {},
             "batteryLevel": -1,
             "lastBatteryLevel": -1,
             "charging": false
@@ -228,6 +260,8 @@ Singleton {
     function refresh() {
         root.devicesDirty = true
         root.notificationsDirty = true
+        // The service object's `DeviceName` is not part of the device table.
+        deviceNameRead.running = true
         root.pumpSync()
     }
 
@@ -360,6 +394,33 @@ Singleton {
         clipboardRead.running = true
     }
 
+    // Enable/disable one plugin for a device (`SetPluginEnabled(sb)`). The
+    // daemon announces the new `Plugins` map with `PropertiesChanged`, and that
+    // is what updates the settings switch, so nothing is written optimistically
+    // here. The call fails for plugins the daemon does not implement: keep the
+    // message for the settings window.
+    function setPluginEnabled(deviceId, pluginId, enabled) {
+        const dev = root.deviceById(deviceId)
+        if (dev === null || dev.path === "")
+            return
+        root.pluginToggleError = ""
+        pluginToggle.deviceId = deviceId
+        pluginToggle.pluginId = String(pluginId)
+        pluginToggle.command = ["busctl", "--user", "call", root.busName, dev.path, root.deviceIface, "SetPluginEnabled", "sb", String(pluginId), enabled ? "true" : "false"]
+        pluginToggle.running = true
+    }
+
+    // Change the name the daemon announces (`SetDeviceName s` on the service
+    // object). The daemon trims it, rejects names over 128 chars, persists the
+    // override and re-announces the identity; the effective value arrives as
+    // `PropertiesChanged(DeviceName)`. An empty string resets it to the host
+    // name. Nothing is written optimistically here.
+    function setDeviceName(name) {
+        root.deviceNameError = ""
+        deviceNameSet.command = ["busctl", "--user", "call", root.busName, root.objectPath, root.iface, "SetDeviceName", "s", String(name)]
+        deviceNameSet.running = true
+    }
+
     // Phone -> desktop clipboard. The daemon emits `ClipboardReceived(content,
     // timestamp)`; the client owns the clipboard, so write it with `wl-copy`.
     // `timestamp` is 0 for regular updates and the phone's clipboard timestamp
@@ -411,6 +472,82 @@ Singleton {
         return plugins[plugin] === true
     }
 
+    // Full `Plugins` map (`a{sb}`: plugin id -> enabled) from a property map.
+    // Kept on the device entry so the settings window can list every plugin the
+    // daemon implements; the popup still reads the flat ping/clipboard flags.
+    function pluginsOf(props) {
+        const plugins = root.propValue(props, "Plugins")
+        if (plugins === null || plugins === undefined || typeof plugins !== "object")
+            return {}
+        return plugins
+    }
+
+    // Display order, labels and glyphs for the plugins the daemon implements
+    // today. Anything else found in `Plugins` is appended with its raw id, so a
+    // plugin added later still shows up instead of being silently hidden.
+    readonly property var pluginLabels: [
+        {
+            "id": "kdeconnect.notification",
+            "label": "Notifications",
+            "icon": "\ue07c" // bell
+        },
+        {
+            "id": "kdeconnect.ping",
+            "label": "Ping",
+            "icon": "\ue091" // megaphone-loud
+        },
+        {
+            "id": "kdeconnect.battery",
+            "label": "Battery",
+            "icon": "\ue00e" // battery-charge
+        },
+        {
+            "id": "kdeconnect.clipboard",
+            "label": "Clipboard",
+            "icon": "\ue090" // clipboard
+        },
+        {
+            "id": "kdeconnect.connectivity_report",
+            "label": "Connectivity report",
+            "icon": "\ue092" // cellular-data-1 (full bars)
+        }
+    ]
+
+    // Plugin rows for the settings window (`{id, label, icon, enabled}`): a
+    // fresh plain array built from the device's `plugins` map. Never hand the
+    // nested map to the ListView model: a map read from a delegate arrives as a
+    // non-enumerable wrapper, so the rows are materialised here (in the
+    // singleton) instead.
+    function pluginList(deviceId) {
+        const dev = root.deviceById(deviceId)
+        if (dev === null)
+            return []
+        const plugins = dev.plugins !== null && dev.plugins !== undefined && typeof dev.plugins === "object" ? dev.plugins : {}
+        const list = []
+        const seen = {}
+        for (let i = 0; i < root.pluginLabels.length; i++) {
+            const entry = root.pluginLabels[i]
+            seen[entry.id] = true
+            list.push({
+                "id": entry.id,
+                "label": entry.label,
+                "icon": entry.icon,
+                "enabled": plugins[entry.id] === true
+            })
+        }
+        for (const id in plugins) {
+            if (seen[id] === true)
+                continue
+            list.push({
+                "id": id,
+                "label": id,
+                "icon": "",
+                "enabled": plugins[id] === true
+            })
+        }
+        return list
+    }
+
     // Build one model entry from a device object path + its property map.
     // Local-only state (`request`, `unpairing`) is carried over; a paired
     // device has no pending request and no unpair in flight.
@@ -434,6 +571,7 @@ Singleton {
             "unpairing": old !== undefined && old.unpairing === true && paired,
             "pingEnabled": root.pluginEnabled(props, "kdeconnect.ping"),
             "clipboardEnabled": root.pluginEnabled(props, "kdeconnect.clipboard"),
+            "plugins": root.pluginsOf(props),
             "batteryLevel": current,
             // The daemon drops the level when the phone goes offline: keep the
             // last reported one locally so the popup can dim it instead of
@@ -482,6 +620,35 @@ Singleton {
         if (dev === null || dev === undefined || typeof dev.lastBatteryLevel !== "number")
             return -1
         return dev.lastBatteryLevel
+    }
+
+    // Cellular bars for a coarse connectivity level (0..4). `cellular-data-1`
+    // is the full five bars, so the level indexes the set reversed. Shared by
+    // the popup and the settings window.
+    readonly property var signalGlyphs: ["\ue096", "\ue095", "\ue094", "\ue093", "\ue092"]
+
+    function signalGlyph(level) {
+        const n = Number(level)
+        if (!(n >= 0))
+            return ""
+        return root.signalGlyphs[Math.max(0, Math.min(4, Math.round(n)))]
+    }
+
+    // Coarse generation label next to the bars ("" when the reported
+    // technology is unknown). Android reports NR for 5G.
+    function signalLabel(type) {
+        const name = String(type || "").toUpperCase()
+        if (name === "" || name.indexOf("UNKNOWN") !== -1)
+            return ""
+        if (name.indexOf("5G") !== -1 || name === "NR" || name === "NRNSA")
+            return "5G"
+        if (name.indexOf("LTE") !== -1 || name.indexOf("4G") !== -1)
+            return "4G"
+        if (name.indexOf("HSPA") !== -1 || name.indexOf("UMTS") !== -1 || name.indexOf("EVDO") !== -1)
+            return "3G"
+        if (name.indexOf("EDGE") !== -1 || name.indexOf("GPRS") !== -1 || name === "GSM" || name === "CDMA")
+            return "2G"
+        return ""
     }
 
     // `a{oa{sa{sv}}}` reply: data[0] = { "<path>": { "<iface>": { "<prop>":
@@ -642,6 +809,8 @@ Singleton {
                 root.handleServiceSignal(msg.member, data)
             else if (msg.interface === root.objectManagerIface)
                 root.handleObjectManager(msg.member, data)
+            else if (msg.interface === root.propertiesIface && msg.member === "PropertiesChanged")
+                root.handleServicePropertiesChanged(data)
             return
         }
 
@@ -703,6 +872,21 @@ Singleton {
                 "request": false
             })
             break
+        }
+    }
+
+    // `PropertiesChanged(iface, changed, invalidated)` on the service object.
+    // Today it only carries `DeviceName` (the name announced to peers).
+    function handleServicePropertiesChanged(data) {
+        if (data.length < 2 || String(data[0]) !== root.iface)
+            return
+        const changed = data[1]
+        if (changed === null || typeof changed !== "object")
+            return
+        if ("DeviceName" in changed) {
+            const name = root.propValue(changed, "DeviceName")
+            root.daemonName = typeof name === "string" ? name : ""
+            root.deviceNameError = ""
         }
     }
 
@@ -821,6 +1005,9 @@ Singleton {
         if ("Plugins" in changed) {
             fields.pingEnabled = root.pluginEnabled(changed, "kdeconnect.ping")
             fields.clipboardEnabled = root.pluginEnabled(changed, "kdeconnect.clipboard")
+            // Full map for the settings window: the switch that triggered
+            // `SetPluginEnabled` updates from this change, never optimistically.
+            fields.plugins = root.pluginsOf(changed)
             // Notifications may have been dropped (plugin disabled).
             root.notificationsEpoch = root.notificationsEpoch + 1
             root.refreshNotifications()
@@ -1162,6 +1349,73 @@ Singleton {
         onExited: function (exitCode) {
             if (exitCode !== 0)
                 root.clearUnpairing(unpairProcess.deviceId)
+        }
+    }
+
+    // `SetPluginEnabled` fails for plugins the daemon does not implement; the
+    // switch itself updates from `PropertiesChanged(Plugins)`, so a failure
+    // only needs the D-Bus message.
+    Process {
+        id: pluginToggle
+        property string deviceId: ""
+        property string pluginId: ""
+
+        stderr: StdioCollector {
+            id: pluginToggleStderr
+        }
+
+        onExited: function (exitCode) {
+            if (exitCode === 0)
+                return
+            const text = root.callErrorText(pluginToggleStderr.text)
+            root.pluginToggleError = text !== "" ? text : "Could not change the plugin state"
+        }
+    }
+
+    // `DeviceName` lives on the service object, so it is not part of the
+    // `GetManagedObjects()` table: read it with `Properties.Get` whenever the
+    // shell syncs. busctl's JSON wraps the returned variant as
+    // `{"type":"v","data":[{"type":"s","data":"<name>"}]}`.
+    Process {
+        id: deviceNameRead
+
+        command: ["busctl", "--user", "--json=short", "call", root.busName, root.objectPath, root.propertiesIface, "Get", "ss", root.iface, "DeviceName"]
+
+        stdout: StdioCollector {
+            id: deviceNameReadOut
+        }
+
+        onExited: function (exitCode) {
+            if (exitCode !== 0)
+                return
+            let reply
+            try {
+                reply = JSON.parse(deviceNameReadOut.text)
+            } catch (e) {
+                return
+            }
+            const data = reply.data
+            if (typeof data === "string")
+                root.daemonName = data
+            else if (Array.isArray(data) && data.length > 0 && data[0] !== null && typeof data[0] === "object" && typeof data[0].data === "string")
+                root.daemonName = data[0].data
+        }
+    }
+
+    // `SetDeviceName` fails for names over 128 characters (and for a failed
+    // persist); the effective value still arrives through `PropertiesChanged`.
+    Process {
+        id: deviceNameSet
+
+        stderr: StdioCollector {
+            id: deviceNameSetStderr
+        }
+
+        onExited: function (exitCode) {
+            if (exitCode === 0)
+                return
+            const text = root.callErrorText(deviceNameSetStderr.text)
+            root.deviceNameError = text !== "" ? text : "Could not change the device name"
         }
     }
 

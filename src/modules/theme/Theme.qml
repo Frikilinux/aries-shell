@@ -45,6 +45,7 @@ Singleton {
     readonly property color bgColor: Config.settings.colors.bgColor
     readonly property color fgColorMuted: Config.settings.colors.fgColorMuted
     readonly property color bgColorMuted: Config.settings.colors.bgColorMuted
+    readonly property color bgColorSecondary: Config.settings.colors.bgColorSecondary
     readonly property color bgColorHover: Qt.alpha(fgColor, 0.05)
     readonly property color urgentColor: Config.settings.colors.urgentColor
     readonly property real bgOpacity: Config.settings.colors.bgOpacity

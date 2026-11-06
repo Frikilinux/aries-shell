@@ -94,6 +94,7 @@ Singleton {
                 fgColor: "#d1d7e0",
                 bgColor: "#2a313c",
                 bgColorMuted: "#262c36",
+                bgColorSecondary: "#212830",
                 fgColorEmphasis: "#f0f6fc",
                 bgOpacity: 0.9,
                 fgColorMuted: "#9198a1",

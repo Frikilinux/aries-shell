@@ -122,7 +122,7 @@ FloatingWindow {
             anchors.left: parent.left
             anchors.right: parent.right
             height: 40
-            cursorShape: Qt.SizeAllCursor
+            cursorShape: Qt.ArrowCursor
             onPressed: function (mouse) {
                 window.startSystemMove()
                 mouse.accepted = true

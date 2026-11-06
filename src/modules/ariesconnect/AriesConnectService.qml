@@ -378,6 +378,19 @@ Singleton {
         pingProcess.running = true
     }
 
+    // Desktop -> phone "find my phone" (`FindMyPhone()` on the device
+    // object). Mirrors `ping`: gated on paired + connected + plugin in the
+    // popup; failures are D-Bus errors surfaced in `actionError`.
+    function findMyPhone(deviceId) {
+        const dev = root.deviceById(deviceId)
+        if (dev === null || dev.path === "")
+            return
+        root.actionError = null
+        findMyPhoneProcess.deviceId = deviceId
+        findMyPhoneProcess.command = ["busctl", "--user", "call", root.busName, dev.path, root.deviceIface, "FindMyPhone"]
+        findMyPhoneProcess.running = true
+    }
+
     // Desktop -> phone clipboard. The daemon only relays packets: the local
     // clipboard is read here with `wl-paste` and sent with `SendClipboard`
     // (text only, empty ignored, backend limit 1 MiB). The button is gated on
@@ -510,6 +523,11 @@ Singleton {
             "id": "kdeconnect.connectivity_report",
             "label": "Connectivity report",
             "icon": "\ue092" // cellular-data-1 (full bars)
+        },
+        {
+            "id": "kdeconnect.findmyphone.request",
+            "label": "Find my phone",
+            "icon": "\ue098" // call-connecting
         }
     ]
 
@@ -571,6 +589,7 @@ Singleton {
             "unpairing": old !== undefined && old.unpairing === true && paired,
             "pingEnabled": root.pluginEnabled(props, "kdeconnect.ping"),
             "clipboardEnabled": root.pluginEnabled(props, "kdeconnect.clipboard"),
+            "findMyPhoneEnabled": root.pluginEnabled(props, "kdeconnect.findmyphone.request"),
             "plugins": root.pluginsOf(props),
             "batteryLevel": current,
             // The daemon drops the level when the phone goes offline: keep the
@@ -1005,6 +1024,7 @@ Singleton {
         if ("Plugins" in changed) {
             fields.pingEnabled = root.pluginEnabled(changed, "kdeconnect.ping")
             fields.clipboardEnabled = root.pluginEnabled(changed, "kdeconnect.clipboard")
+            fields.findMyPhoneEnabled = root.pluginEnabled(changed, "kdeconnect.findmyphone.request")
             // Full map for the settings window: the switch that triggered
             // `SetPluginEnabled` updates from this change, never optimistically.
             fields.plugins = root.pluginsOf(changed)
@@ -1273,6 +1293,27 @@ Singleton {
             root.actionError = {
                 "deviceId": pingProcess.deviceId,
                 "text": text !== "" ? text : "Ping failed"
+            }
+        }
+    }
+
+    // `FindMyPhone` fails for unpaired/disabled/offline devices; the D-Bus
+    // error is surfaced in `actionError` (mirrors `Ping`).
+    Process {
+        id: findMyPhoneProcess
+        property string deviceId: ""
+
+        stderr: StdioCollector {
+            id: findMyPhoneStderr
+        }
+
+        onExited: function (exitCode) {
+            if (exitCode === 0)
+                return
+            const text = root.callErrorText(findMyPhoneStderr.text)
+            root.actionError = {
+                "deviceId": findMyPhoneProcess.deviceId,
+                "text": text !== "" ? text : "Find my phone failed"
             }
         }
     }

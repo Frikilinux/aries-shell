@@ -46,6 +46,7 @@
   "bluetooth-connected": "e025",
   "bluetooth-disabled": "e026",
   "bluetooth-searching": "e027",
+  "call-connecting": "e098",
   "camera": "e06b",
   "cellular-data-1": "e092",
   "cellular-data-2": "e093",

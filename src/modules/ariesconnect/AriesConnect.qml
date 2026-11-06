@@ -39,5 +39,15 @@ Item {
     AriesConnectPopup {
         id: popupWindow
         anchorItem: ariesConnect
+
+        // The gear in the popup header opens the settings window. The two are
+        // separate surfaces (layer-shell popup vs xdg toplevel), so close the
+        // popup first; the window itself lives once in shell.qml (settings are
+        // not per screen, unlike this module).
+        onSettingsRequested: {
+            popupWindow.visible = false
+            AriesConnectService.settingsOutput = ariesConnect.output
+            AriesConnectService.settingsVisible = true
+        }
     }
 }

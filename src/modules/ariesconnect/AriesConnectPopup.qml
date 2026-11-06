@@ -20,7 +20,13 @@ BarPopup {
     // Never taller than 75% of the screen height (same as the network popup).
     maxContentHeight: popup.screen ? Math.round(popup.screen.height * 0.75) : 540
 
+    // The pending pairing request, or null when none (the popup also renders
+    // the Accept/Reject block for it).
     readonly property var request: AriesConnectService.request
+
+    // A click on the gear in the header asks the module to open the settings
+    // window (the popup cannot own a separate toplevel itself).
+    signal settingsRequested
 
     // Card background shared with the network popup (foreground tint).
     readonly property color devHeaderBgColor: Qt.rgba(Theme.fgBarColor.r, Theme.fgBarColor.g, Theme.fgBarColor.b, 0.07)
@@ -87,36 +93,8 @@ BarPopup {
         return count === 1 ? "1 notification" : count + " notifications"
     }
 
-    // Cellular indicator from the connectivity report: bars for the coarse
-    // level plus the network generation as text. `cellular-data-N` glyphs are
-    // indexed here by level (fluent numbers the set the other way round:
-    // data-1 is the full five bars, data-5 the single bar).
-    readonly property var signalGlyphs: ["\ue096", "\ue095", "\ue094", "\ue093", "\ue092"]
-
-    function signalGlyph(level) {
-        const n = Number(level)
-        if (!(n >= 0))
-            return ""
-        return popup.signalGlyphs[Math.max(0, Math.min(4, Math.round(n)))]
-    }
-
-    // Coarse generation label next to the bars ("" when the phone does not
-    // report a technology we can name).
-    function signalLabel(type) {
-        const name = String(type || "").toUpperCase()
-        if (name === "" || name.indexOf("UNKNOWN") !== -1)
-            return ""
-        // Android reports NR for 5G.
-        if (name.indexOf("5G") !== -1 || name === "NR" || name === "NRNSA")
-            return "5G"
-        if (name.indexOf("LTE") !== -1 || name.indexOf("4G") !== -1)
-            return "4G"
-        if (name.indexOf("HSPA") !== -1 || name.indexOf("UMTS") !== -1 || name.indexOf("EVDO") !== -1)
-            return "3G"
-        if (name.indexOf("EDGE") !== -1 || name.indexOf("GPRS") !== -1 || name === "GSM" || name === "CDMA")
-            return "2G"
-        return ""
-    }
+    // Cellular indicator from the connectivity report: bars and generation
+    // label come from the service (shared with the settings window).
 
     // The daemon may have (re)started while the popup was closed.
     function popupOpened() {
@@ -128,7 +106,7 @@ BarPopup {
         AriesConnectService.actionError = null
     }
 
-    // Header: title + close
+    // Header: title, close, and the gear that opens the settings window.
     Item {
         width: parent.width
         height: 26
@@ -144,6 +122,7 @@ BarPopup {
         }
 
         Icon {
+            id: closeIcon
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             glyph: "\ue02f" // dismiss
@@ -152,6 +131,21 @@ BarPopup {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 onClicked: popup.visible = false
+            }
+        }
+
+        // Opens the plugin settings window (the module closes this popup
+        // first, since both are separate surfaces).
+        Icon {
+            anchors.right: closeIcon.left
+            anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            glyph: "\ue071" // settings
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: popup.settingsRequested()
             }
         }
     }
@@ -307,8 +301,8 @@ BarPopup {
         readonly property bool signalCurrent: modelData.signalType !== ""
         readonly property string signalType: deviceCard.signalCurrent ? modelData.signalType : (modelData.lastSignalType || "")
         readonly property int signalLevel: deviceCard.signalCurrent ? modelData.signalLevel : (typeof modelData.lastSignalLevel === "number" ? modelData.lastSignalLevel : -1)
-        readonly property string signalGlyph: popup.signalGlyph(deviceCard.signalLevel)
-        readonly property string signalText: popup.signalLabel(deviceCard.signalType)
+        readonly property string signalGlyph: AriesConnectService.signalGlyph(deviceCard.signalLevel)
+        readonly property string signalText: AriesConnectService.signalLabel(deviceCard.signalType)
         width: popup.contentWidth
         // Content + 6 px padding top/bottom: the quick-action button must not
         // sit against the card's edge (the name/action stack is taller than the

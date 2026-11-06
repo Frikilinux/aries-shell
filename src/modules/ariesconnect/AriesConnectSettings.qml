@@ -421,7 +421,7 @@ FloatingWindow {
                         id: pageLoader
                         width: Math.min(contentFlick.width, 520)
                         x: (contentFlick.width - width) / 2
-                        y: Math.max(0, (contentFlick.height - height) / 2)
+                        y: 0
                         sourceComponent: window.showingDevice ? devicePage : generalPage
                     }
                 }

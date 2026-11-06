@@ -137,6 +137,31 @@ ShellRoot {
         }
     }
 
+    // Aries Connect plugin settings: a single global toplevel (the module is
+    // instantiated per bar/screen, but settings are not). The gear in any
+    // popup flips `AriesConnectService.settingsVisible`; a compositor-initiated
+    // close clears the flag too, so the gear can reopen it.
+    AriesConnectSettings {
+        id: ariesSettings
+        visible: AriesConnectService.settingsVisible
+
+        // A toplevel has no parent window: place it on the output whose bar
+        // opened it (set together with the flag), not on a fixed screen.
+        Connections {
+            target: AriesConnectService
+
+            function onSettingsVisibleChanged() {
+                if (!AriesConnectService.settingsVisible)
+                    return
+                const found = Quickshell.screens.find(s => s.name === AriesConnectService.settingsOutput)
+                if (found !== undefined)
+                    ariesSettings.screen = found
+            }
+        }
+
+        onClosed: AriesConnectService.settingsVisible = false
+    }
+
     // Desktop wallpaper (one Background-layer surface per screen; niri's
     // `place-within-backdrop` rule also pins it into the Overview backdrop).
     // Screens filtered via Config.outputs("wallpaper").

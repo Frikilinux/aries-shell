@@ -113,6 +113,22 @@ FloatingWindow {
 
         Keys.onEscapePressed: AriesConnectService.settingsVisible = false
 
+        // Drag region: the top 40px strip (full width) lets the user click and
+        // drag to move the window. Interactive controls (close/refresh) sit
+        // above it and keep their own clicks.
+        MouseArea {
+            id: dragArea
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 40
+            cursorShape: Qt.SizeAllCursor
+            onPressed: function (mouse) {
+                window.startSystemMove()
+                mouse.accepted = true
+            }
+        }
+
         // Full-height split: light sidebar (left) + dark content (right), flush
         // to the window edges. Each half paints its own rounded outer corners;
         // a border overlay frames the result.
@@ -128,7 +144,7 @@ FloatingWindow {
                 height: parent.height
                 topLeftRadius: Theme.popupRadius
                 bottomLeftRadius: Theme.popupRadius
-                color: Qt.alpha(Theme.bgColor, Theme.bgOpacity)
+                color: Qt.alpha(Theme.bgColorSecondary, Theme.bgOpacity)
 
                 Item {
                     id: sidebarTop
@@ -524,7 +540,7 @@ FloatingWindow {
             anchors.right: parent.right
             anchors.leftMargin: 14
             height: 1
-            color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.08)
+            color: Qt.alpha(Theme.fgColor, 0.08)
         }
     }
 
@@ -644,7 +660,7 @@ FloatingWindow {
             anchors.right: parent.right
             anchors.leftMargin: 14
             height: 1
-            color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.08)
+            color: Qt.alpha(Theme.fgColor, 0.08)
         }
     }
 
@@ -703,7 +719,7 @@ FloatingWindow {
             anchors.right: parent.right
             anchors.leftMargin: 14
             height: 1
-            color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.08)
+            color: Qt.alpha(Theme.fgColor, 0.08)
         }
     }
 
@@ -855,14 +871,14 @@ FloatingWindow {
                     id: bigGear
                     anchors.horizontalCenter: parent.horizontalCenter
                     glyph: "\ue071" // settings
-                    color: Theme.fgColorMuted
-                    font.pixelSize: 56
+                    color: Theme.fgColor
+                    font.pixelSize: 100
                 }
 
                 Text {
                     id: generalTitle
                     anchors.top: bigGear.bottom
-                    anchors.topMargin: 6
+                    anchors.topMargin: 10
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "Aries Connect"
                     color: Theme.fgColor
@@ -940,14 +956,14 @@ FloatingWindow {
                     id: bigDeviceIcon
                     anchors.horizontalCenter: parent.horizontalCenter
                     glyph: window.deviceGlyph(deviceColumn.device !== null ? deviceColumn.device.type : "")
-                    color: Theme.fgColorMuted
-                    font.pixelSize: 56
+                    color: Theme.fgColor
+                    font.pixelSize: 100
                 }
 
                 Text {
                     id: deviceTitle
                     anchors.top: bigDeviceIcon.bottom
-                    anchors.topMargin: 6
+                    anchors.topMargin: 10
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter

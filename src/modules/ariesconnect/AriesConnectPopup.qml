@@ -282,6 +282,8 @@ BarPopup {
         // unknown/unpaired devices).
         readonly property bool pingEnabled: modelData.pingEnabled === true
         readonly property bool pingReady: deviceCard.connected && deviceCard.pingEnabled
+        readonly property bool findMyPhoneEnabled: modelData.findMyPhoneEnabled === true
+        readonly property bool findMyPhoneReady: deviceCard.connected && deviceCard.findMyPhoneEnabled
         readonly property bool clipboardEnabled: modelData.clipboardEnabled === true
         readonly property bool clipboardReady: deviceCard.connected && deviceCard.clipboardEnabled
         readonly property string actionErrorText: AriesConnectService.actionError !== null && AriesConnectService.actionError.deviceId === deviceCard.modelData.deviceId ? AriesConnectService.actionError.text : ""
@@ -470,6 +472,12 @@ BarPopup {
                             glyph: "\ue091" // megaphone-loud
                             enabled: deviceCard.pingReady
                             onClicked: AriesConnectService.ping(deviceCard.modelData.deviceId)
+                        }
+
+                        QuickAction {
+                            glyph: "\ue098" // call-connecting
+                            enabled: deviceCard.findMyPhoneReady
+                            onClicked: AriesConnectService.findMyPhone(deviceCard.modelData.deviceId)
                         }
 
                         QuickAction {

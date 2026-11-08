@@ -123,6 +123,10 @@ Singleton {
     //   { deviceId, name, path, size, status: "queued"|"sent"|"error", time }
     property var sentFiles: []
 
+    // Sent-file rows are a short-lived activity log, not history: older than
+    // this (ms) they are dropped by `pruneSentFiles()`.
+    property real sentFileTtl: 5 * 60 * 1000
+
     // Incoming share progress from `ShareProgress(ttuu)`, or null:
     //   { deviceId, bytes, totalBytes, files, totalFiles, done }
     property var incomingShare: null
@@ -131,6 +135,11 @@ Singleton {
     signal fileReceived(string deviceId, string name, string path)
     signal textReceived(string deviceId, string name, string text)
     signal urlReceived(string deviceId, string name, string url)
+
+    // An outgoing text / URL sent by any client (observed on the bus). The
+    // content is deliberately not echoed.
+    signal textSent(string deviceId, string name)
+    signal urlSent(string deviceId, string name)
 
     // A batch of shares finished (outgoing: every `SendFile` was accepted;
     // incoming: `files == totalFiles`). `incoming` tells the two apart.
@@ -574,6 +583,53 @@ Singleton {
         }
     }
 
+    // Drop sent-file rows past `sentFileTtl` (the list is a short-lived
+    // activity log, not history).
+    function pruneSentFiles() {
+        const cutoff = Date.now() - root.sentFileTtl
+        const list = root.sentFiles.filter(f => f.time >= cutoff)
+        if (list.length !== root.sentFiles.length)
+            root.sentFiles = list
+    }
+
+    // An outgoing share method call observed on the bus (`method_call`), which
+    // may come from outside this module (a script, another client). Our own
+    // `SendFile` already pushed its row before the call, so it is skipped here;
+    // external calls are recorded as "sent" and announced. The daemon reports
+    // no outgoing completion, so the status is optimistic ("sent" on the call).
+    function handleSendCall(devicePath, member, data) {
+        if (devicePath.indexOf(root.devicePathPrefix) !== 0)
+            return
+        const deviceId = devicePath.substring(devicePath.lastIndexOf("/") + 1)
+        if (deviceId === "")
+            return
+        const dev = root.deviceById(deviceId)
+        const name = dev !== null ? root.deviceLabel(dev) : deviceId
+        if (member === "SendFile") {
+            const path = data.length > 0 ? String(data[0]) : ""
+            if (path === "")
+                return
+            for (let i = 0; i < root.sentFiles.length; i++) {
+                const f = root.sentFiles[i]
+                if (f.path === path && f.deviceId === deviceId)
+                    return
+            }
+            root.pushSentFile({
+                "deviceId": deviceId,
+                "name": path.substring(path.lastIndexOf("/") + 1),
+                "path": path,
+                "status": "sent",
+                "error": "",
+                "time": Date.now()
+            })
+            root.shareFinished(deviceId, name, 1, false)
+        } else if (member === "SendText") {
+            root.textSent(deviceId, name)
+        } else if (member === "SendUrl") {
+            root.urlSent(deviceId, name)
+        }
+    }
+
     // Desktop -> phone clipboard. The daemon only relays packets: the local
     // clipboard is read here with `wl-paste` and sent with `SendClipboard`
     // (text only, empty ignored, backend limit 1 MiB). The button is gated on
@@ -995,6 +1051,17 @@ Singleton {
         } catch (e) {
             return
         }
+        if (msg.type === "method_call") {
+            // Outgoing shares can come from outside this module (a script, another
+            // client): observe the SendFile / SendText / SendUrl calls on the
+            // device objects. `method_call` carries the interface and member;
+            // our own calls are deduped inside `handleSendCall`.
+            if (msg.interface === root.deviceIface && (msg.member === "SendFile" || msg.member === "SendText" || msg.member === "SendUrl")) {
+                const callData = msg.payload !== null && msg.payload !== undefined && Array.isArray(msg.payload.data) ? msg.payload.data : []
+                root.handleSendCall(String(msg.path || ""), msg.member, callData)
+            }
+            return
+        }
         if (msg.type !== "signal")
             return
         const path = String(msg.path || "")
@@ -1352,6 +1419,16 @@ Singleton {
         interval: 8000
 
         onTriggered: root.clearUnpairing()
+    }
+
+    // Drop sent-file rows older than `sentFileTtl` (they are activity, not
+    // history). Cheap: only reassigns when something actually expired.
+    Timer {
+        interval: 30000
+        repeat: true
+        running: true
+
+        onTriggered: root.pruneSentFiles()
     }
 
     // Debounce for `scheduleRefresh()`: a burst of link churn collapses into

@@ -724,6 +724,16 @@ Singleton {
             root.showLocal("Aries Connect", "Link received", (name !== "" ? name : deviceId) + ": " + url)
         }
 
+        // An outgoing text / URL sent by another client (observed on the bus).
+        // The content is not echoed.
+        function onTextSent(deviceId, name) {
+            root.showLocal("Aries Connect", "Text sent", "Sent to " + (name !== "" ? name : deviceId))
+        }
+
+        function onUrlSent(deviceId, name) {
+            root.showLocal("Aries Connect", "Link sent", "Sent to " + (name !== "" ? name : deviceId))
+        }
+
         // A share batch finished: incoming files were already toasted one by
         // one (with their Open / Open folder actions); outgoing notifies once
         // every `SendFile` was accepted.

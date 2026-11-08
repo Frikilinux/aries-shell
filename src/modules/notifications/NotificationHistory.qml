@@ -4,6 +4,7 @@ import QtQuick
 import "../theme"
 import "../icon"
 import "../popup"
+import "../widgets"
 
 // Notification history viewer: a bar popup listing every recorded notification
 // (newest first), with per-row delete, a "clear all" action and a Do-Not-Disturb
@@ -37,7 +38,7 @@ BarPopup {
             onClicked: button.clicked()
         }
 
-        signal clicked()
+        signal clicked
     }
 
     // One history row: urgency stripe, app + time, summary, body.
@@ -114,6 +115,25 @@ BarPopup {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSize - 2
             }
+
+            // Action buttons of the notification, when it has any (e.g. a
+            // received file's Open / Open folder). Same invoke path as the
+            // toast, so local `open:`/`folder:` actions keep working.
+            Row {
+                width: parent.width
+                spacing: 6
+                visible: row.entry.actions.length > 0
+
+                Repeater {
+                    model: row.entry.actions
+
+                    delegate: Chip {
+                        required property var modelData
+                        text: modelData.text
+                        onClicked: NotificationService.invokeAction(row.entry.entryId, modelData.identifier)
+                    }
+                }
+            }
         }
 
         Icon {
@@ -132,51 +152,61 @@ BarPopup {
         }
     }
 
-    // Header: title + DND toggle + clear all + close.
-    Item {
-        width: popup.contentWidth
-        height: 26
+    // Fixed header (outside the flick, so it stays on top while the list
+    // scrolls): title + DND toggle + clear all + close, then a separator.
+    header: Item {
+        width: parent.width
+        height: 33
 
-        Text {
+        Item {
+            anchors.top: parent.top
             anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Notifications"
-            color: Theme.fgColor
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize
-            font.bold: true
-        }
-
-        Row {
             anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 12
+            height: 26
 
-            HeaderButton {
-                glyph: "\ue07a"
-                tint: NotificationService.dnd ? Theme.accentColor : Theme.fgColorMuted
-                onClicked: NotificationService.toggleDnd()
+            Text {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Notifications"
+                color: Theme.fgColor
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize
+                font.bold: true
             }
 
-            HeaderButton {
-                glyph: "\ue07d" // trash (clear all)
-                tint: NotificationService.entries.length > 0 ? Theme.fgColor : Theme.fgColorMuted
-                onClicked: NotificationService.clearHistory()
-            }
+            Row {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 12
 
-            HeaderButton {
-                glyph: "\ue02f" // dismiss
-                tint: Theme.fgColor
-                onClicked: popup.visible = false
+                HeaderButton {
+                    glyph: "\ue07a"
+                    tint: NotificationService.dnd ? Theme.accentColor : Theme.fgColorMuted
+                    onClicked: NotificationService.toggleDnd()
+                }
+
+                HeaderButton {
+                    glyph: "\ue07d" // trash (clear all)
+                    tint: NotificationService.entries.length > 0 ? Theme.fgColor : Theme.fgColorMuted
+                    onClicked: NotificationService.clearHistory()
+                }
+
+                HeaderButton {
+                    glyph: "\ue02f" // dismiss
+                    tint: Theme.fgColor
+                    onClicked: popup.visible = false
+                }
             }
         }
-    }
 
-    // Separator.
-    Rectangle {
-        width: popup.contentWidth
-        height: 1
-        color: Theme.borderColorRest
+        // Separator.
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 1
+            color: Theme.borderColorRest
+        }
     }
 
     // Empty state.

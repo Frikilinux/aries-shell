@@ -50,6 +50,16 @@ PanelWindow {
     // Instances add their content here (laid out in the scrollable column)
     default property alias content: column.data
 
+    // Optional fixed header: rendered above the scrollable content column and
+    // never scrolled. Instances add a single item with an explicit height
+    // (`header: Item { height: 33; ... }`); empty by default, so popups without
+    // a header behave exactly as before.
+    property alias header: headerSlot.data
+
+    // Height of the fixed header (0 when none): the flick starts below it and
+    // the popup's implicit height includes it.
+    readonly property real headerHeight: headerSlot.children.length > 0 ? headerSlot.children[0].height : 0
+
     // Optional backdrop layer: painted above the base background and below the
     // content column, spanning the whole window (e.g. the mpris popup's blurred
     // album art). Empty by default, so other popups are unaffected.
@@ -82,9 +92,7 @@ PanelWindow {
     // sends its first configure, which arrives asynchronously after `visible`
     // flips true (WlrLayershell.trySetWidth is a no-op that only re-schedules
     // a polish, so the size only comes from the compositor's configure).
-    readonly property real maxX: popup.barWindow
-        ? popup.barWindow.width - popup.implicitWidth - popup.popupGap
-        : Infinity
+    readonly property real maxX: popup.barWindow ? popup.barWindow.width - popup.implicitWidth - popup.popupGap : Infinity
 
     screen: popup.barWindow ? popup.barWindow.screen : null
 
@@ -102,9 +110,7 @@ PanelWindow {
     // Granted on open via grabKeys() below (Exclusive flick -> OnDemand), so
     // the popup reliably holds keyboard focus instead of relying on hover.
     // With `holdKeyboardFocus` the surface stays Exclusive while visible.
-    WlrLayershell.keyboardFocus: popup.holdKeyboardFocus
-        ? WlrKeyboardFocus.Exclusive
-        : WlrKeyboardFocus.OnDemand
+    WlrLayershell.keyboardFocus: popup.holdKeyboardFocus ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
 
     // Compositor blur behind the popup (colors.blur, ext-background-effect-v1),
     // matching the rounded popup background; `null` removes it on toggle.
@@ -119,11 +125,13 @@ PanelWindow {
     visible: false
     color: "transparent"
     implicitWidth: popupWidth
-    implicitHeight: Math.min(column.implicitHeight + popup.contentPadding * 2, maxContentHeight)
+    implicitHeight: Math.min(popup.headerHeight + (popup.headerHeight > 0 ? 6 : 0) + column.implicitHeight + popup.contentPadding * 2, maxContentHeight)
 
     // Override in instances to run extra logic when shown / hidden.
-    function popupOpened() {}
-    function popupClosed() {}
+    function popupOpened() {
+    }
+    function popupClosed() {
+    }
 
     onVisibleChanged: {
         if (visible) {
@@ -187,7 +195,6 @@ PanelWindow {
         const win = popup.barWindow
         if (win === null)
             return
-
         const rect = win.itemRect(popup.anchorItem)
         // Centred on the anchor item horizontally; vertical offset is just
         // `popupGap` from the screen's top edge (top-anchored layer surface).
@@ -223,6 +230,9 @@ PanelWindow {
         id: flick
         anchors.fill: parent
         anchors.margins: popup.contentPadding
+        // Leave room for the fixed header (plus the column spacing) when there
+        // is one; without a header this is exactly the old top margin.
+        anchors.topMargin: popup.contentPadding + (popup.headerHeight > 0 ? popup.headerHeight + 6 : 0)
         contentWidth: width
         contentHeight: column.implicitHeight
         clip: true
@@ -233,6 +243,19 @@ PanelWindow {
             width: flick.width
             spacing: 6
         }
+    }
+
+    // Fixed header: outside the flick, so it stays on top while the list
+    // scrolls. Instances fill it through the `header` alias with one item that
+    // carries an explicit height.
+    Item {
+        id: headerSlot
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: popup.contentPadding
+        height: popup.headerHeight
+        visible: popup.headerHeight > 0
     }
 
     // Overlay slot (above the content): corner badges, borders redrawn over a

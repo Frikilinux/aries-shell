@@ -115,6 +115,38 @@ Singleton {
     // not from this call, so a failure only needs the message.
     property string pluginToggleError: ""
 
+    // Last `SetDownloadDir` failure ("" = none), shown by the settings window.
+    property string downloadDirError: ""
+
+    // Outgoing shares tracked in this session. The daemon keeps no history for
+    // sent files and reports no completion, so the shell owns this list:
+    //   { deviceId, name, path, size, status: "queued"|"sent"|"error", time }
+    property var sentFiles: []
+
+    // Incoming share progress from `ShareProgress(ttuu)`, or null:
+    //   { deviceId, bytes, totalBytes, files, totalFiles, done }
+    property var incomingShare: null
+
+    // The phone shared text / a URL / a finished file (popup + toast).
+    signal fileReceived(string deviceId, string name, string path)
+    signal textReceived(string deviceId, string name, string text)
+    signal urlReceived(string deviceId, string name, string url)
+
+    // A batch of shares finished (outgoing: every `SendFile` was accepted;
+    // incoming: `files == totalFiles`). `incoming` tells the two apart.
+    signal shareFinished(string deviceId, string name, int files, bool incoming)
+
+    // Internal share machinery: the `SendFile` call queue (serialized on one
+    // Process), the batch being sent, the picker callback and the last
+    // completed incoming batch (de-duplicates `shareFinished`).
+    property var shareQueue: []
+    property bool shareSending: false
+    property string shareBatchDevice: ""
+    property int shareBatchCount: 0
+    property int shareBatchSent: 0
+    property var portalCallback: null
+    property string shareDoneKey: ""
+
     // Whether the global settings window is open. The module is instantiated
     // once per bar (per screen), but settings are not per screen: every gear
     // flips this flag and a single window in shell.qml follows it.
@@ -239,6 +271,8 @@ Singleton {
             "unpairing": false,
             "pingEnabled": false,
             "clipboardEnabled": false,
+            "shareEnabled": false,
+            "downloadDir": "",
             "plugins": {},
             "batteryLevel": -1,
             "lastBatteryLevel": -1,
@@ -391,6 +425,155 @@ Singleton {
         findMyPhoneProcess.running = true
     }
 
+    // ---- Share -------------------------------------------------------------
+
+    // Open the platform picker (xdg-desktop-portal via `portal-picker.py`).
+    // `callback` receives a list of absolute paths (empty when cancelled).
+    function pickFiles(callback) {
+        root.portalCallback = callback
+        portalPicker.command = ["python3", Quickshell.shellDir + "/modules/ariesconnect/portal-picker.py", "files", "--title", "Share files"]
+        portalPicker.running = true
+    }
+
+    function pickDirectory(callback) {
+        root.portalCallback = callback
+        portalPicker.command = ["python3", Quickshell.shellDir + "/modules/ariesconnect/portal-picker.py", "directory", "--title", "Select a folder"]
+        portalPicker.running = true
+    }
+
+    // Share local files with a device. `SendFile` only *accepts* the file (the
+    // daemon serves the bytes in the background and reports no completion), so
+    // each row goes "queued" -> "sent"/"error"; the batch notification fires
+    // once every call has returned.
+    function sendFiles(deviceId, paths) {
+        const dev = root.deviceById(deviceId)
+        if (dev === null || dev.path === "")
+            return
+        root.actionError = null
+        let added = 0
+        for (let i = 0; i < paths.length; i++) {
+            const path = String(paths[i])
+            if (path === "")
+                continue
+            const name = path.substring(path.lastIndexOf("/") + 1)
+            root.pushSentFile({
+                "deviceId": deviceId,
+                "name": name,
+                "path": path,
+                "status": "queued",
+                "error": "",
+                "time": Date.now()
+            })
+            root.shareQueue.push({
+                "deviceId": deviceId,
+                "path": path
+            })
+            added++
+        }
+        if (added === 0)
+            return
+        if (root.shareBatchDevice === "") {
+            root.shareBatchDevice = deviceId
+            root.shareBatchSent = 0
+        }
+        root.shareBatchCount += added
+        root.pumpShareQueue()
+    }
+
+    function pushSentFile(entry) {
+        const list = root.sentFiles.slice()
+        list.push(entry)
+        root.sentFiles = list
+    }
+
+    function updateSentFile(path, fields) {
+        const list = root.sentFiles.slice()
+        for (let i = list.length - 1; i >= 0; i--) {
+            if (list[i].path === path) {
+                list[i] = Object.assign({}, list[i], fields)
+                break
+            }
+        }
+        root.sentFiles = list
+    }
+
+    function sentFilesFor(deviceId) {
+        return root.sentFiles.filter(f => f.deviceId === deviceId)
+    }
+
+    // Serialize the `SendFile` calls on one Process (each is quick: it returns
+    // as soon as the daemon has announced the file).
+    function pumpShareQueue() {
+        if (root.shareSending)
+            return
+        if (root.shareQueue.length === 0) {
+            if (root.shareBatchDevice !== "") {
+                const dev = root.deviceById(root.shareBatchDevice)
+                const name = dev !== null ? root.deviceLabel(dev) : root.shareBatchDevice
+                // Only announce what actually reached the daemon; a batch that
+                // failed entirely already surfaces `actionError` + Failed rows.
+                if (root.shareBatchSent > 0)
+                    root.shareFinished(root.shareBatchDevice, name, root.shareBatchSent, false)
+                root.shareBatchDevice = ""
+                root.shareBatchCount = 0
+                root.shareBatchSent = 0
+            }
+            return
+        }
+        const item = root.shareQueue.shift()
+        const dev = root.deviceById(item.deviceId)
+        if (dev === null || dev.path === "") {
+            root.updateSentFile(item.path, {
+                "status": "error",
+                "error": "Device unavailable"
+            })
+            Qt.callLater(root.pumpShareQueue)
+            return
+        }
+        root.shareSending = true
+        shareSendProcess.deviceId = item.deviceId
+        shareSendProcess.path = item.path
+        shareSendProcess.command = ["busctl", "--user", "call", root.busName, dev.path, root.deviceIface, "SendFile", "s", item.path]
+        shareSendProcess.running = true
+    }
+
+    // Change where this device's incoming files are saved (`SetDownloadDir`).
+    function setDownloadDir(deviceId, dir) {
+        const dev = root.deviceById(deviceId)
+        if (dev === null || dev.path === "")
+            return
+        root.downloadDirError = ""
+        downloadDirProcess.deviceId = deviceId
+        downloadDirProcess.command = ["busctl", "--user", "call", root.busName, dev.path, root.deviceIface, "SetDownloadDir", "s", String(dir)]
+        downloadDirProcess.running = true
+    }
+
+    // Incoming batch progress; a `done` update notifies once per batch.
+    function handleShareProgress(dev, data) {
+        const bytes = data.length > 0 ? Number(data[0]) : 0
+        const totalBytes = data.length > 1 ? Number(data[1]) : 0
+        const files = data.length > 2 ? Number(data[2]) : 0
+        const totalFiles = data.length > 3 ? Number(data[3]) : 0
+        const done = totalFiles > 0 && files >= totalFiles
+        root.incomingShare = {
+            "deviceId": dev.deviceId,
+            "bytes": bytes,
+            "totalBytes": totalBytes,
+            "files": files,
+            "totalFiles": totalFiles,
+            "done": done
+        }
+        const key = dev.deviceId + ":" + totalFiles
+        if (done) {
+            if (root.shareDoneKey !== key) {
+                root.shareDoneKey = key
+                root.shareFinished(dev.deviceId, root.deviceLabel(dev), totalFiles, true)
+            }
+        } else {
+            root.shareDoneKey = ""
+        }
+    }
+
     // Desktop -> phone clipboard. The daemon only relays packets: the local
     // clipboard is read here with `wl-paste` and sent with `SendClipboard`
     // (text only, empty ignored, backend limit 1 MiB). The button is gated on
@@ -528,6 +711,11 @@ Singleton {
             "id": "kdeconnect.findmyphone.request",
             "label": "Find my phone",
             "icon": "\ue098" // call-connecting
+        },
+        {
+            "id": "kdeconnect.share.request",
+            "label": "Share",
+            "icon": "\ue099" // share
         }
     ]
 
@@ -590,6 +778,8 @@ Singleton {
             "pingEnabled": root.pluginEnabled(props, "kdeconnect.ping"),
             "clipboardEnabled": root.pluginEnabled(props, "kdeconnect.clipboard"),
             "findMyPhoneEnabled": root.pluginEnabled(props, "kdeconnect.findmyphone.request"),
+            "shareEnabled": root.pluginEnabled(props, "kdeconnect.share.request"),
+            "downloadDir": String(root.propValue(props, "DownloadDir") || ""),
             "plugins": root.pluginsOf(props),
             "batteryLevel": current,
             // The daemon drops the level when the phone goes offline: keep the
@@ -849,6 +1039,8 @@ Singleton {
         root.notifications = []
         root.actionError = null
         root.clipboardTimestamp = 0
+        root.incomingShare = null
+        root.shareDoneKey = ""
         // Clicks aimed at the previous owner are meaningless now.
         root.dismissQueue = []
         // Snapshots started against the previous owner are worthless now.
@@ -985,6 +1177,8 @@ Singleton {
         }
         if ("IsCharging" in changed)
             fields.charging = root.propValue(changed, "IsCharging") === true
+        if ("DownloadDir" in changed)
+            fields.downloadDir = String(root.propValue(changed, "DownloadDir") || "")
         // Connectivity report: the daemon announces and clears the map here
         // (new report, disconnect, unpair, plugin toggled).
         if ("SignalStrengths" in changed) {
@@ -1025,6 +1219,7 @@ Singleton {
             fields.pingEnabled = root.pluginEnabled(changed, "kdeconnect.ping")
             fields.clipboardEnabled = root.pluginEnabled(changed, "kdeconnect.clipboard")
             fields.findMyPhoneEnabled = root.pluginEnabled(changed, "kdeconnect.findmyphone.request")
+            fields.shareEnabled = root.pluginEnabled(changed, "kdeconnect.share.request")
             // Full map for the settings window: the switch that triggered
             // `SetPluginEnabled` updates from this change, never optimistically.
             fields.plugins = root.pluginsOf(changed)
@@ -1061,6 +1256,18 @@ Singleton {
         case "NotificationDismissed":
             root.notificationsEpoch = root.notificationsEpoch + 1
             root.removeNotification(dev.deviceId, data.length > 0 ? String(data[0]) : "")
+            break
+        case "TextReceived":
+            root.textReceived(dev.deviceId, root.deviceLabel(dev), data.length > 0 ? String(data[0]) : "")
+            break
+        case "UrlReceived":
+            root.urlReceived(dev.deviceId, root.deviceLabel(dev), data.length > 0 ? String(data[0]) : "")
+            break
+        case "FileReceived":
+            root.fileReceived(dev.deviceId, root.deviceLabel(dev), data.length > 0 ? String(data[0]) : "")
+            break
+        case "ShareProgress":
+            root.handleShareProgress(dev, data)
             break
         }
     }
@@ -1315,6 +1522,86 @@ Singleton {
                 "deviceId": findMyPhoneProcess.deviceId,
                 "text": text !== "" ? text : "Find my phone failed"
             }
+        }
+    }
+
+    // One `SendFile` at a time; `pumpShareQueue()` advances it and marks the
+    // row sent/error. Success means "the daemon accepted the file", not "the
+    // bytes arrived" (there is no outgoing completion signal).
+    Process {
+        id: shareSendProcess
+        property string deviceId: ""
+        property string path: ""
+
+        stderr: StdioCollector {
+            id: shareSendStderr
+        }
+
+        onExited: function (exitCode) {
+            if (exitCode === 0) {
+                root.updateSentFile(shareSendProcess.path, {
+                    "status": "sent",
+                    "error": ""
+                })
+                root.shareBatchSent += 1
+            } else {
+                const text = root.callErrorText(shareSendStderr.text)
+                root.updateSentFile(shareSendProcess.path, {
+                    "status": "error",
+                    "error": text !== "" ? text : "Share failed"
+                })
+                if (root.actionError === null)
+                    root.actionError = {
+                        "deviceId": shareSendProcess.deviceId,
+                        "text": text !== "" ? text : "Share failed"
+                    }
+            }
+            root.shareSending = false
+            // Deferred: the next call must not start while this process is
+            // still being torn down.
+            Qt.callLater(root.pumpShareQueue)
+        }
+    }
+
+    // `SetDownloadDir` failure (empty path clears the per-device override).
+    Process {
+        id: downloadDirProcess
+        property string deviceId: ""
+
+        stderr: StdioCollector {
+            id: downloadDirStderr
+        }
+
+        onExited: function (exitCode) {
+            if (exitCode === 0)
+                return
+            const text = root.callErrorText(downloadDirStderr.text)
+            root.downloadDirError = text !== "" ? text : "Could not set the download folder"
+        }
+    }
+
+    // Short-lived xdg-desktop-portal picker (`portal-picker.py`). Prints the
+    // selected absolute paths, one per line; a cancelled dialog exits non-zero.
+    Process {
+        id: portalPicker
+
+        stdout: StdioCollector {
+            id: portalPickerOut
+        }
+
+        stderr: StdioCollector {
+            id: portalPickerErr
+        }
+
+        onExited: function (exitCode) {
+            const cb = root.portalCallback
+            root.portalCallback = null
+            if (cb === null || exitCode !== 0)
+                return
+            const text = String(portalPickerOut.text || "")
+            const paths = text.split("\n").filter(p => p !== "")
+            if (paths.length > 0)
+                cb(paths)
         }
     }
 

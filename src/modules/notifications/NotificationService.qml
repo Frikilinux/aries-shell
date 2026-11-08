@@ -239,6 +239,13 @@ Singleton {
                 }
             }
             root.focusSourceApp(entry)
+        } else if (String(identifier).indexOf("open:") === 0) {
+            // Local file notification: open the saved file with the system
+            // handler. Paths live in the identifier so the button keeps working
+            // after a restart (the actions are persisted).
+            Quickshell.execDetached(["xdg-open", String(identifier).slice(5)])
+        } else if (String(identifier).indexOf("folder:") === 0) {
+            Quickshell.execDetached(["xdg-open", String(identifier).slice(7)])
         }
         root.dismissEntry(id)
     }
@@ -305,7 +312,7 @@ Singleton {
     // Local notice (neither a client notification nor a phone one), e.g. a ping
     // received from the phone: same surface as everything else (toast +
     // history), no server object behind it.
-    function showLocal(appName, summary, body) {
+    function showLocal(appName, summary, body, actions) {
         const entry = entryComp.createObject(root, {
             entryId: ++root.entrySeq,
             time: Date.now()
@@ -313,6 +320,7 @@ Singleton {
         entry.appName = appName
         entry.summary = summary
         entry.body = body
+        entry.actions = actions !== undefined && actions !== null ? actions : []
         entry.isTransient = false
         entry.urgency = NotificationUrgency.Normal
         root.entries = [entry].concat(root.entries)
@@ -686,6 +694,44 @@ Singleton {
         // A phone asked to pair: the prompt needs an answer within 30 s.
         function onPairingRequest(deviceId, name) {
             root.showLocal("Aries Connect", "Pairing request", (name !== "" ? name : deviceId) + " wants to pair")
+        }
+
+        // A file finished downloading: toast it with two actions that open the
+        // saved file or the folder containing it (the daemon never opens
+        // anything itself). The paths live in the action identifiers so the
+        // buttons keep working from the persisted history.
+        function onFileReceived(deviceId, name, path) {
+            const file = path.substring(path.lastIndexOf("/") + 1)
+            const dir = path.substring(0, path.lastIndexOf("/"))
+            root.showLocal("Aries Connect", "File received", (name !== "" ? name : deviceId) + " · " + file, [
+                {
+                    "identifier": "open:" + path,
+                    "text": "Open"
+                },
+                {
+                    "identifier": "folder:" + dir,
+                    "text": "Open folder"
+                }
+            ])
+        }
+
+        // Text / URL shared by the phone (shown verbatim, one line each).
+        function onTextReceived(deviceId, name, text) {
+            root.showLocal("Aries Connect", "Text received", (name !== "" ? name : deviceId) + ": " + text)
+        }
+
+        function onUrlReceived(deviceId, name, url) {
+            root.showLocal("Aries Connect", "Link received", (name !== "" ? name : deviceId) + ": " + url)
+        }
+
+        // A share batch finished: incoming files were already toasted one by
+        // one (with their Open / Open folder actions); outgoing notifies once
+        // every `SendFile` was accepted.
+        function onShareFinished(deviceId, name, files, incoming) {
+            if (incoming)
+                return
+            const who = name !== "" ? name : deviceId
+            root.showLocal("Aries Connect", "Files sent", files + (files === 1 ? " file sent to " : " files sent to ") + who)
         }
     }
 

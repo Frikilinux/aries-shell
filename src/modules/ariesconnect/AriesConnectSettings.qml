@@ -103,6 +103,7 @@ FloatingWindow {
         if (visible) {
             AriesConnectService.pluginToggleError = ""
             AriesConnectService.deviceNameError = ""
+            AriesConnectService.downloadDirError = ""
             AriesConnectService.refresh()
         }
     }
@@ -664,6 +665,75 @@ FloatingWindow {
         }
     }
 
+    // Two-line folder value with a pencil that opens the platform directory
+    // picker (xdg-desktop-portal). The chosen path is emitted via `picked`;
+    // the row itself does not edit inline.
+    component DirectoryRow: Item {
+        id: directoryRow
+        property string label: ""
+        property string value: ""
+        property bool last: false
+        signal picked(string path)
+
+        width: parent.width
+        height: 56
+
+        Text {
+            id: directoryLabel
+            anchors.left: parent.left
+            anchors.leftMargin: 14
+            anchors.top: parent.top
+            anchors.topMargin: 7
+            text: directoryRow.label
+            color: Theme.fgColorMuted
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize - 3
+        }
+
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 14
+            anchors.right: directoryIcon.left
+            anchors.rightMargin: 8
+            anchors.top: directoryLabel.bottom
+            anchors.topMargin: 1
+            text: directoryRow.value !== "" ? directoryRow.value : "Not set"
+            color: directoryRow.value !== "" ? Theme.fgColor : Theme.fgColorMuted
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize - 1
+            elide: Text.ElideMiddle
+        }
+
+        Icon {
+            id: directoryIcon
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            glyph: "\ue097" // edit (pencil)
+            color: Theme.fgColorMuted
+            font.pixelSize: 16
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: AriesConnectService.pickDirectory(function (paths) {
+                    if (paths.length > 0)
+                        directoryRow.picked(paths[0])
+                })
+            }
+        }
+
+        Rectangle {
+            visible: !directoryRow.last
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: 14
+            height: 1
+            color: Qt.alpha(Theme.fgColor, 0.08)
+        }
+    }
+
     // Label on the left, status dot + value on the right.
     component StatusRow: Item {
         id: statusRow
@@ -1003,6 +1073,34 @@ FloatingWindow {
                     value: window.signalText(deviceColumn.device)
                     last: true
                 }
+            }
+
+            SectionHeader {
+                title: "Sharing"
+                subtitle: "Where files shared by this device are saved."
+            }
+
+            Group {
+                DirectoryRow {
+                    label: "Download folder"
+                    value: deviceColumn.device !== null ? (deviceColumn.device.downloadDir || "") : ""
+                    last: true
+
+                    onPicked: function (dir) {
+                        if (deviceColumn.device !== null)
+                            AriesConnectService.setDownloadDir(deviceColumn.device.deviceId, dir)
+                    }
+                }
+            }
+
+            Text {
+                visible: AriesConnectService.downloadDirError !== ""
+                width: parent.width
+                text: AriesConnectService.downloadDirError
+                color: Theme.urgencyCriticalColor
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize - 3
+                wrapMode: Text.Wrap
             }
 
             SectionHeader {

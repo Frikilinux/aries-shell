@@ -284,6 +284,8 @@ BarPopup {
         readonly property bool pingReady: deviceCard.connected && deviceCard.pingEnabled
         readonly property bool findMyPhoneEnabled: modelData.findMyPhoneEnabled === true
         readonly property bool findMyPhoneReady: deviceCard.connected && deviceCard.findMyPhoneEnabled
+        readonly property bool shareEnabled: modelData.shareEnabled === true
+        readonly property bool shareReady: deviceCard.connected && deviceCard.shareEnabled
         readonly property bool clipboardEnabled: modelData.clipboardEnabled === true
         readonly property bool clipboardReady: deviceCard.connected && deviceCard.clipboardEnabled
         readonly property string actionErrorText: AriesConnectService.actionError !== null && AriesConnectService.actionError.deviceId === deviceCard.modelData.deviceId ? AriesConnectService.actionError.text : ""
@@ -460,7 +462,7 @@ BarPopup {
                         id: actionsRow
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 8
+                        spacing: 4
 
                         QuickAction {
                             glyph: "\ue090" // clipboard
@@ -478,6 +480,18 @@ BarPopup {
                             glyph: "\ue098" // call-connecting
                             enabled: deviceCard.findMyPhoneReady
                             onClicked: AriesConnectService.findMyPhone(deviceCard.modelData.deviceId)
+                        }
+
+                        QuickAction {
+                            glyph: "\ue099" // share
+                            enabled: deviceCard.shareReady
+                            onClicked: {
+                                const deviceId = deviceCard.modelData.deviceId
+                                popup.visible = false
+                                AriesConnectService.pickFiles(function (paths) {
+                                    AriesConnectService.sendFiles(deviceId, paths)
+                                })
+                            }
                         }
 
                         QuickAction {
@@ -584,6 +598,90 @@ BarPopup {
         }
     }
 
+    // A file this desktop shared in this session (outgoing). The daemon keeps
+    // no history for sent files: name + per-file status only.
+    component SentFileRow: Item {
+        id: sentRow
+        required property var modelData
+        width: popup.contentWidth
+        height: 34
+
+        Icon {
+            id: sentIcon
+            anchors.left: parent.left
+            anchors.leftMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            glyph: "\ue099" // share
+            color: Theme.fgColorMuted
+            font.pixelSize: Theme.fontSize + 1
+        }
+
+        Text {
+            id: sentStatus
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            text: sentRow.modelData.status === "sent" ? "Sent" : sentRow.modelData.status === "error" ? "Failed" : "Sending…"
+            color: sentRow.modelData.status === "error" ? Theme.urgencyCriticalColor : sentRow.modelData.status === "sent" ? Theme.accentColor : Theme.fgColorMuted
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize - 4
+        }
+
+        Text {
+            anchors.left: sentIcon.right
+            anchors.leftMargin: 8
+            anchors.right: sentStatus.left
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            text: sentRow.modelData.name
+            color: Theme.fgColor
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize - 2
+            elide: Text.ElideRight
+        }
+    }
+
+    // Incoming share batch progress (`ShareProgress`). Hidden once done.
+    component ShareProgressBar: Item {
+        id: progressBar
+        required property var modelData
+        width: popup.contentWidth
+        height: 30
+
+        readonly property real ratio: modelData !== null && modelData !== undefined && modelData.totalBytes > 0 ? Math.min(1, modelData.bytes / modelData.totalBytes) : 0
+
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 8
+            anchors.bottom: track.top
+            anchors.bottomMargin: 2
+            text: modelData !== null && modelData !== undefined ? "Receiving " + modelData.files + "/" + modelData.totalFiles : ""
+            color: Theme.fgColorMuted
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize - 4
+        }
+
+        Rectangle {
+            id: track
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 4
+            height: 6
+            radius: 3
+            color: Qt.alpha(Theme.fgColor, 0.12)
+
+            Rectangle {
+                width: Math.round(track.width * progressBar.ratio)
+                height: parent.height
+                radius: parent.radius
+                color: Theme.accentColor
+            }
+        }
+    }
+
     // One section per paired device: the card, then its notifications (newest
     // first) while it is the expanded one.
     Repeater {
@@ -594,11 +692,30 @@ BarPopup {
             required property var modelData
             readonly property bool open: popup.expandedId === section.modelData.deviceId
             readonly property var notes: popup.notificationsOf(section.modelData.deviceId)
+            readonly property var sent: AriesConnectService.sentFilesFor(section.modelData.deviceId)
+            readonly property var incoming: AriesConnectService.incomingShare !== null && AriesConnectService.incomingShare.deviceId === section.modelData.deviceId ? AriesConnectService.incomingShare : null
             width: popup.contentWidth
             spacing: 4
 
             DeviceCard {
                 modelData: section.modelData
+            }
+
+            ShareProgressBar {
+                visible: section.open && section.incoming !== null && !section.incoming.done
+                modelData: section.incoming
+            }
+
+            Column {
+                width: parent.width
+                visible: section.open && section.sent.length > 0
+                spacing: 0
+
+                Repeater {
+                    model: section.sent
+
+                    delegate: SentFileRow {}
+                }
             }
 
             Flickable {

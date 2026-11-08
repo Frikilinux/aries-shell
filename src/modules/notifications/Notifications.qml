@@ -28,13 +28,24 @@ Item {
     // The pill only appears while there is an unread count to show; with DND on
     // and nothing unread the module shows the bare dimmed bell-off icon.
     readonly property bool counted: notifications.unread > 0
+    // The history popup is open (also when opened via IPC, when there may be
+    // nothing unread and DND is off). Keeping the icon on screen lets the
+    // popup anchor to a laid-out item and hides it again on close.
+    readonly property bool popupOpen: historyPopup.visible
     readonly property int animationTime: Config.settings.bar.animation
 
     implicitWidth: notifications.counted ? container.width : indicator.implicitWidth
     implicitHeight: notifications.counted ? container.height : Math.max(indicator.implicitHeight, 1)
 
     // Module is visible only if outputs property is unset, matches this output, or contains it
-    visible: (notifications.counted || notifications.dndOn) && (!outputs || (Array.isArray(outputs) ? outputs.includes(output) : outputs === output))
+    visible: (notifications.counted || notifications.dndOn || notifications.popupOpen) && (!outputs || (Array.isArray(outputs) ? outputs.includes(output) : outputs === output))
+
+    // The popup may open via IPC while the module was hidden; once it appears
+    // the bar reflows, so re-anchor the popup to the icon's new position.
+    onVisibleChanged: {
+        if (notifications.visible)
+            Qt.callLater(historyPopup.refreshItemPos)
+    }
 
     // Pill behind the icon + count pair (see widgets/Pill.qml). Its edge is
     // inset by Theme.iconInset per side so it aligns with the ink edge of
@@ -59,9 +70,9 @@ Item {
         anchors.leftMargin: notifications.counted ? Theme.iconInset + Theme.pillPadding : 0
         anchors.verticalCenter: parent.verticalCenter
         // bell-urgent for unread critical, bell-off while DND is on, bell otherwise
-        glyph: notifications.critical ? "\ue07b" : (notifications.dndOn ? "\ue07a" : (notifications.unread ? "\ue07c" : ""))
+        glyph: notifications.critical ? "\ue07b" : (notifications.dndOn ? "\ue07a" : "\ue07c")
         color: Theme.fgBarColor
-        opacity: (notifications.counted || notifications.dndOn) ? 1 : 0.6
+        opacity: (notifications.counted || notifications.dndOn || notifications.popupOpen) ? 1 : 0.6
     }
 
     // Unread count on the right side of the icon, inside the pill.
@@ -87,9 +98,9 @@ Item {
         cursorShape: Qt.PointingHandCursor
         onClicked: function (mouse) {
             if (mouse.button === Qt.MiddleButton)
-                NotificationService.toggleDnd();
+                NotificationService.toggleDnd()
             else
-                historyPopup.visible = !historyPopup.visible;
+                historyPopup.visible = !historyPopup.visible
         }
     }
 

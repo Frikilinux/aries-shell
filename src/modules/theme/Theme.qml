@@ -42,6 +42,7 @@ Singleton {
     readonly property color fgBarColor: Config.settings.colors.fgBarColor
     readonly property color bgBarColor: Config.settings.colors.bgBarColor
     readonly property color fgColor: Config.settings.colors.fgColor
+    readonly property color fgColorEmphasis: Config.settings.colors.fgColorEmphasis
     readonly property color bgColor: Config.settings.colors.bgColor
     readonly property color fgColorMuted: Config.settings.colors.fgColorMuted
     readonly property color bgColorMuted: Config.settings.colors.bgColorMuted

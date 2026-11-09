@@ -45,6 +45,10 @@ FloatingWindow {
     // "" = the general (daemon) page; otherwise the selected device id.
     property string selectedDeviceId: ""
 
+    // Rounded surface radius shared by the groups and by the first/last row
+    // hover fills, which must follow the card's corners.
+    readonly property int groupRadius: 12
+
     // Same list/order as the popup: paired only, connected first, then name.
     readonly property var pairedList: {
         const list = AriesConnectService.devices.filter(d => d.paired === true && !d.request)
@@ -233,8 +237,8 @@ FloatingWindow {
                         Rectangle {
                             id: generalNav
                             width: parent.width
-                            height: 42
-                            radius: 8
+                            height: 44
+                            radius: 9
                             color: window.showingDevice ? (navMouse.containsMouse ? Qt.alpha(Theme.fgColor, 0.10) : Qt.alpha(Theme.fgColor, 0.05)) : Qt.alpha(Theme.accentColor, 0.18)
                             // color: Qt.alpha(Theme.fgColor, 0.05)
                             // border.width: window.showingDevice ? 0 : 1
@@ -330,7 +334,7 @@ FloatingWindow {
                         Rectangle {
                             width: parent.width
                             implicitHeight: deviceList.implicitHeight
-                            radius: 9
+                            radius: window.groupRadius
                             color: Qt.alpha(Theme.fgColor, 0.05)
                             border.width: 1
                             border.color: Qt.alpha(Theme.borderColorRest, 0.6)
@@ -422,15 +426,22 @@ FloatingWindow {
                     }
                 }
 
+                // Flush with the header: the page carries its own 24px top pad
+                // (`pageTopPad`), so a scrolled row disappears right at the
+                // header edge instead of 24px below it.
                 Flickable {
                     id: contentFlick
+                    readonly property int pageTopPad: 24
+
                     anchors.top: contentHeader.bottom
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
-                    anchors.margins: 24
+                    anchors.leftMargin: 24
+                    anchors.rightMargin: 24
+                    anchors.bottomMargin: 24
                     contentWidth: width
-                    contentHeight: Math.max(pageLoader.height, height)
+                    contentHeight: Math.max(pageLoader.height + pageTopPad, height)
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
@@ -438,8 +449,30 @@ FloatingWindow {
                         id: pageLoader
                         width: Math.min(contentFlick.width, 520)
                         x: (contentFlick.width - width) / 2
-                        y: 0
+                        y: contentFlick.pageTopPad
                         sourceComponent: window.showingDevice ? devicePage : generalPage
+                    }
+                }
+
+                // Soft edge under the header while the page is scrolled, so the
+                // cut-off row reads as "scrolled under" and not as a glitch.
+                Rectangle {
+                    anchors.top: contentHeader.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: 6
+                    visible: contentFlick.contentY > 0.5
+
+                    gradient: Gradient {
+                        GradientStop {
+                            position: 0
+                            color: Qt.alpha(Theme.bgBarColor, 0.6)
+                        }
+
+                        GradientStop {
+                            position: 1
+                            color: "transparent"
+                        }
                     }
                 }
             }
@@ -460,7 +493,7 @@ FloatingWindow {
         property string title: ""
         property string subtitle: ""
         width: parent.width
-        spacing: 3
+        spacing: 4
 
         Text {
             width: parent.width
@@ -478,21 +511,20 @@ FloatingWindow {
             text: parent.subtitle
             color: Theme.fgColorMuted
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize - 2
+            font.pixelSize: Theme.fontSize - 1
             wrapMode: Text.Wrap
         }
     }
 
-    // Grouped rows on a rounded surface, libadwaita style.
+    // Grouped rows on a rounded card, libadwaita style: one surface for the
+    // whole group, a dark 1px hairline between rows, no border and no gaps.
     component Group: Rectangle {
         id: group
         default property alias content: groupColumn.data
         width: parent.width
         implicitHeight: groupColumn.implicitHeight
-        radius: 9
-        color: Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.05)
-        border.width: 1
-        border.color: Qt.rgba(Theme.borderColorRest.r, Theme.borderColorRest.g, Theme.borderColorRest.b, 0.6)
+        radius: window.groupRadius
+        color: Qt.alpha(Theme.bgColorSecondary, Theme.bgOpacity)
 
         Column {
             id: groupColumn
@@ -508,30 +540,30 @@ FloatingWindow {
         property string value: ""
         property bool last: false
         width: parent.width
-        height: 44
+        height: 54
 
         Text {
             anchors.left: parent.left
-            anchors.leftMargin: 14
+            anchors.leftMargin: 16
             anchors.right: valueText.left
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             text: valueRow.label
             color: Theme.fgColor
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize - 1
+            font.pixelSize: Theme.fontSize
             elide: Text.ElideRight
         }
 
         Text {
             id: valueText
             anchors.right: parent.right
-            anchors.rightMargin: 14
+            anchors.rightMargin: 16
             anchors.verticalCenter: parent.verticalCenter
             text: valueRow.value
             color: Theme.fgColorMuted
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize - 1
+            font.pixelSize: Theme.fontSize
         }
 
         Rectangle {
@@ -539,198 +571,374 @@ FloatingWindow {
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: 14
+            anchors.leftMargin: 16
             height: 1
-            color: Qt.alpha(Theme.fgColor, 0.08)
+            color: Qt.alpha(Theme.bgBarColor, 0.85)
         }
     }
 
     // Editable two-line row (libadwaita): a small muted label on top, the
     // value below, and a pencil on the right. Pressing the pencil turns the
     // value into an inline text field; Enter/focus loss commits, Escape
-    // cancels.
+    // cancels. The row highlights on hover (`first` / `last` keep the fill
+    // inside the group's rounded corners).
     component EditableRow: Item {
         id: editableRow
         property string label: ""
         property string value: ""
+        property bool first: false
         property bool last: false
         property bool editing: false
         signal committed(string value)
 
         width: parent.width
-        height: 56
+        height: 62
+
+        function beginEdit() {
+            if (editableRow.editing)
+                return
+            editor.text = editableRow.value
+            editableRow.editing = true
+            Qt.callLater(function () {
+                editor.forceActiveFocus()
+                editor.selectAll()
+            })
+        }
+
+        // Leaving edit mode: `commit` emits the typed value, otherwise the
+        // previous one stays (Escape). The focus-out handler and Enter both
+        // funnel here, so the `editing` guard avoids a double emit.
+        function finishEdit(commit) {
+            if (!editableRow.editing)
+                return
+            const text = editor.text
+            editableRow.editing = false
+            if (commit)
+                editableRow.committed(text)
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            topLeftRadius: editableRow.first ? window.groupRadius : 0
+            topRightRadius: editableRow.first ? window.groupRadius : 0
+            bottomLeftRadius: editableRow.last ? window.groupRadius : 0
+            bottomRightRadius: editableRow.last ? window.groupRadius : 0
+            color: rowHover.hovered && !editableRow.editing ? Qt.alpha(Theme.fgColor, 0.045) : "transparent"
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: 120
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+
+        HoverHandler {
+            id: rowHover
+        }
+
+        // Click anywhere on the row to start editing (the pencil is only the
+        // affordance, not the only target). No cursor change on hover: GTK
+        // keeps the plain arrow on this kind of row.
+        MouseArea {
+            anchors.fill: parent
+            onClicked: editableRow.beginEdit()
+        }
 
         Text {
             id: editableLabel
             anchors.left: parent.left
-            anchors.leftMargin: 14
+            anchors.leftMargin: 16
             anchors.top: parent.top
-            anchors.topMargin: 7
+            anchors.topMargin: 8
             text: editableRow.label
             color: Theme.fgColorMuted
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize - 3
+            font.pixelSize: Theme.fontSize - 4
         }
 
         Text {
             anchors.left: parent.left
-            anchors.leftMargin: 14
-            anchors.right: editIcon.left
+            anchors.leftMargin: 16
+            anchors.right: editButton.left
             anchors.rightMargin: 8
             anchors.top: editableLabel.bottom
-            anchors.topMargin: 1
+            anchors.topMargin: 2
             text: editableRow.value
             color: Theme.fgColor
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize - 1
+            font.pixelSize: Theme.fontSize
             elide: Text.ElideRight
             visible: !editableRow.editing
         }
 
-        Icon {
-            id: editIcon
+        // Pencil: purely decorative affordance (no box, no hover, no action —
+        // the whole row is the click target). Hidden while editing.
+        Item {
+            id: editButton
             anchors.right: parent.right
-            anchors.rightMargin: 12
+            anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
+            width: 28
+            height: 28
             visible: !editableRow.editing
-            glyph: "\ue097" // edit (pencil)
-            color: Theme.fgColorMuted
-            font.pixelSize: 16
 
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    editableRow.editing = true
-                    editor.text = editableRow.value
-                    Qt.callLater(function () {
-                        editor.forceActiveFocus()
-                        editor.selectAll()
-                    })
-                }
+            Icon {
+                anchors.centerIn: parent
+                glyph: "\ue097" // edit (pencil)
+                color: Theme.fgColorMuted
+                font.pixelSize: 16
             }
         }
 
+        // Editing frame: the accent border wraps the whole row (label
+        // included), like a libadwaita entry.
         Rectangle {
+            anchors.fill: parent
             visible: editableRow.editing
+            radius: 6
+            color: "transparent"
+            border.width: 2
+            border.color: Theme.accentColor
+        }
+
+        TextInput {
+            id: editor
             anchors.left: parent.left
-            anchors.leftMargin: 12
+            anchors.leftMargin: 14
             anchors.right: parent.right
-            anchors.rightMargin: 12
+            anchors.rightMargin: 14
             anchors.top: editableLabel.bottom
             anchors.topMargin: 2
-            height: 28
-            radius: 7
-            color: "transparent"
-            border.width: 1
-            border.color: editor.activeFocus ? Theme.accentColor : Theme.borderColorRest
+            height: 24
+            color: Theme.fgColor
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+            selectByMouse: true
+            clip: true
+            visible: editableRow.editing
 
-            TextInput {
-                id: editor
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
-                anchors.verticalCenter: parent.verticalCenter
-                color: Theme.fgColor
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSize - 1
-                selectByMouse: true
-                visible: editableRow.editing
+            onAccepted: editableRow.finishEdit(true)
+            Keys.onEscapePressed: editableRow.finishEdit(false)
 
-                onAccepted: {
-                    editableRow.editing = false
-                    editableRow.committed(text)
-                }
-
-                Keys.onEscapePressed: editableRow.editing = false
-
-                onActiveFocusChanged: {
-                    if (!activeFocus && editableRow.editing) {
-                        editableRow.editing = false
-                        editableRow.committed(text)
-                    }
-                }
+            onActiveFocusChanged: {
+                if (!activeFocus && editableRow.editing)
+                    editableRow.finishEdit(true)
             }
         }
 
         Rectangle {
-            visible: !editableRow.last
+            visible: !editableRow.last && !editableRow.editing
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: 14
+            anchors.leftMargin: 16
             height: 1
-            color: Qt.alpha(Theme.fgColor, 0.08)
+            color: Qt.alpha(Theme.bgBarColor, 0.85)
         }
     }
 
-    // Two-line folder value with a pencil that opens the platform directory
-    // picker (xdg-desktop-portal). The chosen path is emitted via `picked`;
-    // the row itself does not edit inline.
+    // Two-line path row (libadwaita): small label on top, the path below, a
+    // pencil that starts inline editing and a folder button that opens the
+    // platform directory picker (xdg-desktop-portal). Clicking anywhere on the
+    // row edits the text; the folder button stays available while editing.
+    // Committing emits `picked` (an empty value clears the override).
     component DirectoryRow: Item {
         id: directoryRow
         property string label: ""
         property string value: ""
+        property bool first: false
         property bool last: false
+        property bool editing: false
         signal picked(string path)
 
         width: parent.width
-        height: 56
+        height: 62
+
+        function beginEdit() {
+            if (directoryRow.editing)
+                return
+            editor.text = directoryRow.value
+            directoryRow.editing = true
+            Qt.callLater(function () {
+                editor.forceActiveFocus()
+                editor.selectAll()
+            })
+        }
+
+        function finishEdit(commit) {
+            if (!directoryRow.editing)
+                return
+            const text = editor.text
+            directoryRow.editing = false
+            if (commit)
+                directoryRow.picked(text)
+        }
+
+        // Opens the picker: leave edit mode without committing, so the typed
+        // text cannot race with the picked path (focus-out would commit it).
+        function openPicker() {
+            directoryRow.editing = false
+            AriesConnectService.pickDirectory(function (paths) {
+                if (paths.length > 0)
+                    directoryRow.picked(paths[0])
+            })
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            topLeftRadius: directoryRow.first ? window.groupRadius : 0
+            topRightRadius: directoryRow.first ? window.groupRadius : 0
+            bottomLeftRadius: directoryRow.last ? window.groupRadius : 0
+            bottomRightRadius: directoryRow.last ? window.groupRadius : 0
+            color: rowHover.hovered && !directoryRow.editing ? Qt.alpha(Theme.fgColor, 0.045) : "transparent"
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: 120
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+
+        HoverHandler {
+            id: rowHover
+        }
+
+        // Click anywhere on the row to edit the path by hand. Plain arrow, no
+        // cursor change on hover (matches the rest of the settings rows).
+        MouseArea {
+            anchors.fill: parent
+            onClicked: directoryRow.beginEdit()
+        }
 
         Text {
             id: directoryLabel
             anchors.left: parent.left
-            anchors.leftMargin: 14
+            anchors.leftMargin: 16
             anchors.top: parent.top
-            anchors.topMargin: 7
+            anchors.topMargin: 8
             text: directoryRow.label
             color: Theme.fgColorMuted
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize - 3
+            font.pixelSize: Theme.fontSize - 4
         }
 
         Text {
             anchors.left: parent.left
-            anchors.leftMargin: 14
-            anchors.right: directoryIcon.left
+            anchors.leftMargin: 16
+            anchors.right: editButton.left
             anchors.rightMargin: 8
             anchors.top: directoryLabel.bottom
-            anchors.topMargin: 1
+            anchors.topMargin: 2
             text: directoryRow.value !== "" ? directoryRow.value : "Not set"
             color: directoryRow.value !== "" ? Theme.fgColor : Theme.fgColorMuted
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize - 1
+            font.pixelSize: Theme.fontSize
             elide: Text.ElideMiddle
+            visible: !directoryRow.editing
         }
 
-        Icon {
-            id: directoryIcon
-            anchors.right: parent.right
-            anchors.rightMargin: 12
+        // Pencil: decorative affordance for the inline editor (bare glyph, no
+        // box, no hover, no action). Hidden while editing.
+        Item {
+            id: editButton
+            anchors.right: folderButton.left
+            anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
-            glyph: "\ue097" // edit (pencil)
-            color: Theme.fgColorMuted
-            font.pixelSize: 16
+            width: 28
+            height: 28
+            visible: !directoryRow.editing
+
+            Icon {
+                anchors.centerIn: parent
+                glyph: "\ue097" // edit (pencil)
+                color: Theme.fgColorMuted
+                font.pixelSize: 16
+            }
+        }
+
+        // Folder: opens the platform directory picker, so it is the only icon
+        // with a hover circle. Stays visible while editing.
+        Item {
+            id: folderButton
+            anchors.right: parent.right
+            anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            width: 28
+            height: 28
+
+            Rectangle {
+                anchors.fill: parent
+                radius: height / 2
+                color: folderMouse.containsMouse ? Qt.alpha(Theme.fgColor, 0.10) : "transparent"
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 100
+                        easing.type: Easing.OutCubic
+                    }
+                }
+            }
+
+            Icon {
+                anchors.centerIn: parent
+                glyph: "\ue09a" // folder
+                color: Theme.fgColor
+                font.pixelSize: 16
+            }
 
             MouseArea {
+                id: folderMouse
                 anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: AriesConnectService.pickDirectory(function (paths) {
-                    if (paths.length > 0)
-                        directoryRow.picked(paths[0])
-                })
+                hoverEnabled: true
+                onClicked: directoryRow.openPicker()
+            }
+        }
+
+        // Editing frame: the accent border wraps the whole row.
+        Rectangle {
+            anchors.fill: parent
+            visible: directoryRow.editing
+            radius: 6
+            color: "transparent"
+            border.width: 2
+            border.color: Theme.accentColor
+        }
+
+        TextInput {
+            id: editor
+            anchors.left: parent.left
+            anchors.leftMargin: 14
+            anchors.right: folderButton.left
+            anchors.rightMargin: 8
+            anchors.top: directoryLabel.bottom
+            anchors.topMargin: 2
+            height: 24
+            color: Theme.fgColor
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+            selectByMouse: true
+            clip: true
+            visible: directoryRow.editing
+
+            onAccepted: directoryRow.finishEdit(true)
+            Keys.onEscapePressed: directoryRow.finishEdit(false)
+
+            onActiveFocusChanged: {
+                if (!activeFocus && directoryRow.editing)
+                    directoryRow.finishEdit(true)
             }
         }
 
         Rectangle {
-            visible: !directoryRow.last
+            visible: !directoryRow.last && !directoryRow.editing
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: 14
+            anchors.leftMargin: 16
             height: 1
-            color: Qt.alpha(Theme.fgColor, 0.08)
+            color: Qt.alpha(Theme.bgBarColor, 0.85)
         }
     }
 
@@ -742,25 +950,25 @@ FloatingWindow {
         property color dotColor: "transparent"
         property bool last: false
         width: parent.width
-        height: 44
+        height: 54
 
         Text {
             anchors.left: parent.left
-            anchors.leftMargin: 14
+            anchors.leftMargin: 16
             anchors.right: statusValue.left
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             text: statusRow.label
             color: Theme.fgColor
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize - 1
+            font.pixelSize: Theme.fontSize
             elide: Text.ElideRight
         }
 
         Row {
             id: statusValue
             anchors.right: parent.right
-            anchors.rightMargin: 14
+            anchors.rightMargin: 16
             anchors.verticalCenter: parent.verticalCenter
             spacing: 7
 
@@ -778,7 +986,7 @@ FloatingWindow {
                 text: statusRow.value
                 color: Theme.fgColorMuted
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSize - 1
+                font.pixelSize: Theme.fontSize
             }
         }
 
@@ -787,9 +995,9 @@ FloatingWindow {
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: 14
+            anchors.leftMargin: 16
             height: 1
-            color: Qt.alpha(Theme.fgColor, 0.08)
+            color: Qt.alpha(Theme.bgBarColor, 0.85)
         }
     }
 
@@ -801,16 +1009,37 @@ FloatingWindow {
         property string glyph: ""
         property string label: ""
         property bool checked: false
+        property bool first: false
         property bool last: false
         signal toggled
 
         width: parent.width
-        height: 46
+        height: 54
+
+        Rectangle {
+            anchors.fill: parent
+            topLeftRadius: switchRow.first ? window.groupRadius : 0
+            topRightRadius: switchRow.first ? window.groupRadius : 0
+            bottomLeftRadius: switchRow.last ? window.groupRadius : 0
+            bottomRightRadius: switchRow.last ? window.groupRadius : 0
+            color: rowHover.hovered ? Qt.alpha(Theme.fgColor, 0.045) : "transparent"
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: 120
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+
+        HoverHandler {
+            id: rowHover
+        }
 
         Icon {
             id: rowIcon
             anchors.left: parent.left
-            anchors.leftMargin: 14
+            anchors.leftMargin: 16
             anchors.verticalCenter: parent.verticalCenter
             width: 20
             horizontalAlignment: Text.AlignHCenter
@@ -821,22 +1050,26 @@ FloatingWindow {
 
         Text {
             anchors.left: rowIcon.right
-            anchors.leftMargin: 10
+            anchors.leftMargin: 12
             anchors.right: rowSwitch.left
-            anchors.rightMargin: 10
+            anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             text: switchRow.label
             color: Theme.fgColor
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize - 1
+            font.pixelSize: Theme.fontSize
             elide: Text.ElideRight
         }
 
+        // libadwaita switch: 46x26 with a 20px knob (3px inset).
         Switch {
             id: rowSwitch
             anchors.right: parent.right
-            anchors.rightMargin: 12
+            anchors.rightMargin: 16
             anchors.verticalCenter: parent.verticalCenter
+            trackWidth: 46
+            trackHeight: 26
+            knobInset: 3
             checked: switchRow.checked
             onToggled: switchRow.toggled()
         }
@@ -846,9 +1079,9 @@ FloatingWindow {
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: 44
+            anchors.leftMargin: 48
             height: 1
-            color: Qt.alpha(Theme.fgColor, 0.08)
+            color: Qt.alpha(Theme.bgBarColor, 0.85)
         }
     }
 
@@ -861,12 +1094,12 @@ FloatingWindow {
         readonly property int battery: modelData.batteryLevel >= 0 ? modelData.batteryLevel : modelData.lastBatteryLevel
 
         width: parent.width
-        height: 48
+        height: 52
 
         Rectangle {
             anchors.fill: parent
             anchors.margins: 2
-            radius: 7
+            radius: 8
             color: deviceRow.selected ? Qt.alpha(Theme.accentColor, 0.18) : deviceMouse.containsMouse ? Qt.alpha(Theme.fgColor, 0.05) : "transparent"
         }
 
@@ -931,7 +1164,7 @@ FloatingWindow {
         id: generalPage
 
         Column {
-            spacing: 16
+            spacing: 18
 
             Item {
                 width: parent.width
@@ -967,6 +1200,7 @@ FloatingWindow {
                 EditableRow {
                     label: "Name"
                     value: AriesConnectService.daemonLabel
+                    first: true
 
                     onCommitted: function (name) {
                         AriesConnectService.setDeviceName(name)
@@ -1016,7 +1250,7 @@ FloatingWindow {
             id: deviceColumn
             readonly property var device: window.selectedDevice
             readonly property var pluginRows: AriesConnectService.pluginList(device !== null ? device.deviceId : "")
-            spacing: 16
+            spacing: 18
 
             Item {
                 width: parent.width
@@ -1084,6 +1318,7 @@ FloatingWindow {
                 DirectoryRow {
                     label: "Download folder"
                     value: deviceColumn.device !== null ? (deviceColumn.device.downloadDir || "") : ""
+                    first: true
                     last: true
 
                     onPicked: function (dir) {
@@ -1116,6 +1351,7 @@ FloatingWindow {
                         glyph: modelData.icon
                         label: modelData.label
                         checked: modelData.enabled
+                        first: index === 0
                         last: index === deviceColumn.pluginRows.length - 1
                         onToggled: AriesConnectService.setPluginEnabled(window.selectedDeviceId, modelData.id, !modelData.enabled)
                     }

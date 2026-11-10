@@ -320,7 +320,8 @@ Singleton {
         entry.appName = appName
         entry.summary = summary
         entry.body = body
-        entry.actions = actions !== undefined && actions !== null ? actions : []
+        const cleaned = (actions !== undefined && actions !== null ? actions : []).filter(a => a && (a.text || "").trim() !== "")
+        entry.actions = cleaned
         entry.isTransient = false
         entry.urgency = NotificationUrgency.Normal
         root.entries = [entry].concat(root.entries)
@@ -475,11 +476,18 @@ Singleton {
     function _actionsOf(notification) {
         const out = []
         const acts = notification.actions || []
-        for (let i = 0; i < acts.length; i++)
+        for (let i = 0; i < acts.length; i++) {
+            const text = acts[i].text || ""
+            // Drop actions with no visible label (e.g. the freedesktop
+            // "default" action sent with an empty label): they render as an
+            // empty button / blank space in the popup and toast.
+            if (text.trim() === "")
+                continue
             out.push({
                 identifier: acts[i].identifier,
-                text: acts[i].text
+                text: text
             })
+        }
         return out
     }
 
@@ -595,7 +603,7 @@ Singleton {
             desktopEntry: entry.desktopEntry,
             urgency: entry.urgency,
             time: entry.time,
-            actions: entry.actions,
+            actions: (entry.actions || []).filter(a => (a && (a.text || "").trim() !== "")),
             // Phone origin (deviceId/notificationId) so the entry keeps being
             // updated by the daemon after a shell restart instead of duplicated.
             external: entry.external
@@ -632,7 +640,7 @@ Singleton {
             entry.body = d.body || ""
             entry.desktopEntry = d.desktopEntry || ""
             entry.urgency = d.urgency !== undefined ? d.urgency : NotificationUrgency.Normal
-            entry.actions = d.actions || []
+            entry.actions = (d.actions || []).filter(a => a && (a.text || "").trim() !== "")
             entry.isTransient = false
             entry.popup = false
             entry.external = d.external && d.external.deviceId && d.external.notificationId ? d.external : null

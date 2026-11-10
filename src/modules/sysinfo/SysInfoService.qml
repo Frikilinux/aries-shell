@@ -52,11 +52,14 @@ Singleton {
     property var history: []           // recent total usage samples (oldest first)
     property bool usageReady: false
 
+    // Fan speed (RPM); -1 = no sensor found.
+    property real fanRPM: -1
+
     readonly property bool hasTemp: root.temperature >= 0
     readonly property bool hasFreq: root.freqMHz > 0
+    readonly property bool hasFan: root.fanRPM >= 0
     // 1-minute load average scaled to the core count (0..100)
-    readonly property real loadRatio: root.coresLogical > 0
-        ? Math.min(100, root.load1 / root.coresLogical * 100) : 0
+    readonly property real loadRatio: root.coresLogical > 0 ? Math.min(100, root.load1 / root.coresLogical * 100) : 0
 
     // Previous /proc/stat sample, kept for the deltas
     property real prevTotal: 0
@@ -75,8 +78,7 @@ Singleton {
     function formatLoad() {
         if (!root.usageReady)
             return "\u2014"
-        return root.load1.toFixed(2) + " \u00b7 " + root.load5.toFixed(2)
-            + " \u00b7 " + root.load15.toFixed(2)
+        return root.load1.toFixed(2) + " \u00b7 " + root.load5.toFixed(2) + " \u00b7 " + root.load15.toFixed(2)
     }
 
     function formatCores() {
@@ -118,53 +120,64 @@ Singleton {
             }
             const p = line.split("\t")
             switch (p[0]) {
-            case "T": {
-                const t = parseInt(p[1], 10)
-                root.temperature = isNaN(t) || t < 0 ? -1 : t / 1000
-                break
-            }
-            case "F": {
-                const sum = parseInt(p[1], 10)
-                const n = parseInt(p[2], 10)
-                const lo = parseInt(p[3], 10)
-                const hi = parseInt(p[4], 10)
-                root.freqMHz = n > 0 && sum > 0 ? sum / n / 1000 : 0
-                root.freqMinMHz = n > 0 ? lo / 1000 : 0
-                root.freqMaxMHz = n > 0 ? hi / 1000 : 0
-                break
-            }
-            case "X": {
-                const mx = parseInt(p[1], 10)
-                const bs = parseInt(p[2], 10)
-                root.maxFreqMHz = isNaN(mx) || mx <= 0 ? 0 : mx / 1000
-                root.baseFreqMHz = isNaN(bs) || bs <= 0 ? 0 : bs / 1000
-                break
-            }
+            case "T":
+                {
+                    const t = parseInt(p[1], 10)
+                    root.temperature = isNaN(t) || t < 0 ? -1 : t / 1000
+                    break
+                }
+            case "F":
+                {
+                    const sum = parseInt(p[1], 10)
+                    const n = parseInt(p[2], 10)
+                    const lo = parseInt(p[3], 10)
+                    const hi = parseInt(p[4], 10)
+                    root.freqMHz = n > 0 && sum > 0 ? sum / n / 1000 : 0
+                    root.freqMinMHz = n > 0 ? lo / 1000 : 0
+                    root.freqMaxMHz = n > 0 ? hi / 1000 : 0
+                    break
+                }
+            case "X":
+                {
+                    const mx = parseInt(p[1], 10)
+                    const bs = parseInt(p[2], 10)
+                    root.maxFreqMHz = isNaN(mx) || mx <= 0 ? 0 : mx / 1000
+                    root.baseFreqMHz = isNaN(bs) || bs <= 0 ? 0 : bs / 1000
+                    break
+                }
             case "G":
                 root.governor = p[1] === undefined ? "" : p[1]
                 break
             case "E":
                 root.energyPref = p[1] === undefined ? "" : p[1]
                 break
-            case "L": {
-                const l1 = parseFloat(p[1])
-                const l5 = parseFloat(p[2])
-                const l15 = parseFloat(p[3])
-                root.load1 = isNaN(l1) ? 0 : l1
-                root.load5 = isNaN(l5) ? 0 : l5
-                root.load15 = isNaN(l15) ? 0 : l15
-                break
-            }
+            case "L":
+                {
+                    const l1 = parseFloat(p[1])
+                    const l5 = parseFloat(p[2])
+                    const l15 = parseFloat(p[3])
+                    root.load1 = isNaN(l1) ? 0 : l1
+                    root.load5 = isNaN(l5) ? 0 : l5
+                    root.load15 = isNaN(l15) ? 0 : l15
+                    break
+                }
             case "M":
                 root.modelName = p[1] === undefined ? "" : p[1]
                 break
-            case "C": {
-                const cl = parseInt(p[1], 10)
-                const cp = parseInt(p[2], 10)
-                root.coresLogical = isNaN(cl) ? 0 : cl
-                root.coresPhysical = isNaN(cp) || cp <= 0 ? root.coresLogical : cp
-                break
-            }
+            case "C":
+                {
+                    const cl = parseInt(p[1], 10)
+                    const cp = parseInt(p[2], 10)
+                    root.coresLogical = isNaN(cl) ? 0 : cl
+                    root.coresPhysical = isNaN(cp) || cp <= 0 ? root.coresLogical : cp
+                    break
+                }
+            case "R":
+                {
+                    const r = parseInt(p[1], 10)
+                    root.fanRPM = isNaN(r) || r < 0 ? -1 : r
+                    break
+                }
             }
         }
         root.applyStat(statLines)
@@ -189,12 +202,14 @@ Singleton {
                 totalT = t
                 totalI = idle
             } else {
-                now.push({ t: t, i: idle })
+                now.push({
+                    t: t,
+                    i: idle
+                })
             }
         }
         if (totalT <= 0)
             return
-
         const prev = root.prevCores
         const usages = []
         let totalU = root.usage
@@ -209,9 +224,7 @@ Singleton {
                         continue
                     }
                     const d = now[k].t - before.t
-                    usages.push(d > 0
-                        ? clampPct(100 * (d - (now[k].i - before.i)) / d)
-                        : (before.u || 0))
+                    usages.push(d > 0 ? clampPct(100 * (d - (now[k].i - before.i)) / d) : (before.u || 0))
                 }
                 root.usage = totalU
                 root.coreUsage = usages
@@ -223,7 +236,11 @@ Singleton {
         // Keep this sample as the baseline for the next one
         const keep = []
         for (let k = 0; k < now.length; k++)
-            keep.push({ t: now[k].t, i: now[k].i, u: usages[k] === undefined ? 0 : usages[k] })
+            keep.push({
+                t: now[k].t,
+                i: now[k].i,
+                u: usages[k] === undefined ? 0 : usages[k]
+            })
         root.prevTotal = totalT
         root.prevIdle = totalI
         root.prevCores = keep
@@ -235,61 +252,13 @@ Singleton {
 
     function pushHistory(v) {
         const h = root.history.concat([Math.round(v * 10) / 10])
-        root.history = h.length > root.historyLimit
-            ? h.slice(h.length - root.historyLimit)
-            : h
+        root.history = h.length > root.historyLimit ? h.slice(h.length - root.historyLimit) : h
     }
 
     // ------------------------------------------------------------------
     // The sample: key/value lines, then `S` and the /proc/stat cpu lines
     // ------------------------------------------------------------------
-    readonly property string script:
-        "t=\"\"; "
-        + "for l in /sys/class/hwmon/hwmon*/temp*_label; do "
-        + "[ -r \"$l\" ] || continue; "
-        + "case \"$(cat \"$l\" 2>/dev/null)\" in "
-        + "\"Package id 0\"|Tctl|Tdie) v=$(cat \"${l%_label}_input\" 2>/dev/null); "
-        + "case \"$v\" in ''|*[!0-9]*) ;; *) t=$v; break;; esac;; "
-        + "esac; "
-        + "done; "
-        + "if [ -z \"$t\" ]; then "
-        + "for z in /sys/class/thermal/thermal_zone*; do "
-        + "[ -r \"$z/temp\" ] || continue; "
-        + "case \"$(cat \"$z/type\" 2>/dev/null)\" in "
-        + "x86_pkg_temp|*CPU*|*cpu*) v=$(cat \"$z/temp\" 2>/dev/null); "
-        + "case \"$v\" in ''|*[!0-9]*) ;; *) t=$v; break;; esac;; "
-        + "esac; "
-        + "done; "
-        + "fi; "
-        + "[ -n \"$t\" ] || t=-1; "
-        + "printf 'T\t%s\n' \"$t\"; "
-        + "fs=0; fn=0; fmin=0; fmax=0; "
-        + "for c in /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq; do "
-        + "[ -r \"$c\" ] || continue; "
-        + "v=$(cat \"$c\" 2>/dev/null); "
-        + "case \"$v\" in ''|*[!0-9]*) continue;; esac; "
-        + "if [ \"$fn\" -eq 0 ]; then fmin=$v; fmax=$v; fi; "
-        + "[ \"$v\" -lt \"$fmin\" ] && fmin=$v; "
-        + "[ \"$v\" -gt \"$fmax\" ] && fmax=$v; "
-        + "fs=$((fs+v)); fn=$((fn+1)); "
-        + "done; "
-        + "printf 'F\t%s\t%s\t%s\t%s\n' \"$fs\" \"$fn\" \"$fmin\" \"$fmax\"; "
-        + "printf 'X\t%s\t%s\n' \"$(cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq 2>/dev/null)\" "
-        + "\"$(cat /sys/devices/system/cpu/cpu0/cpufreq/base_frequency 2>/dev/null)\"; "
-        + "printf 'G\t%s\n' \"$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)\"; "
-        + "printf 'E\t%s\n' \"$(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference 2>/dev/null)\"; "
-        + "set -- $(cat /proc/loadavg); "
-        + "printf 'L\t%s\t%s\t%s\n' \"$1\" \"$2\" \"$3\"; "
-        + "m=$(awk -F: '/model name/{sub(/^[ \\t]+/,\"\",$2); print $2; exit}' /proc/cpuinfo); "
-        + "[ -n \"$m\" ] || m=$(awk -F: '/^Model|^Hardware/{sub(/^[ \\t]+/,\"\",$2); print $2; exit}' /proc/cpuinfo); "
-        + "cl=$(grep -c '^processor' /proc/cpuinfo); "
-        + "cp=$(awk -F: '/physical id/{gsub(/[ \\t]/,\"\",$2); s=$2} "
-        + "/core id/{gsub(/[ \\t]/,\"\",$2); print s\":\"$2}' /proc/cpuinfo | sort -u | wc -l); "
-        + "cl=$((cl+0)); cp=$((cp+0)); "
-        + "printf 'M\t%s\n' \"$m\"; "
-        + "printf 'C\t%s\t%s\n' \"$cl\" \"$cp\"; "
-        + "printf 'S\n'; "
-        + "grep '^cpu' /proc/stat"
+    readonly property string script: "t=\"\"; " + "for l in /sys/class/hwmon/hwmon*/temp*_label; do " + "[ -r \"$l\" ] || continue; " + "case \"$(cat \"$l\" 2>/dev/null)\" in " + "\"Package id 0\"|Tctl|Tdie) v=$(cat \"${l%_label}_input\" 2>/dev/null); " + "case \"$v\" in ''|*[!0-9]*) ;; *) t=$v; break;; esac;; " + "esac; " + "done; " + "if [ -z \"$t\" ]; then " + "for z in /sys/class/thermal/thermal_zone*; do " + "[ -r \"$z/temp\" ] || continue; " + "case \"$(cat \"$z/type\" 2>/dev/null)\" in " + "x86_pkg_temp|*CPU*|*cpu*) v=$(cat \"$z/temp\" 2>/dev/null); " + "case \"$v\" in ''|*[!0-9]*) ;; *) t=$v; break;; esac;; " + "esac; " + "done; " + "fi; " + "[ -n \"$t\" ] || t=-1; " + "printf 'T\t%s\n' \"$t\"; " + "fs=0; fn=0; fmin=0; fmax=0; " + "for c in /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq; do " + "[ -r \"$c\" ] || continue; " + "v=$(cat \"$c\" 2>/dev/null); " + "case \"$v\" in ''|*[!0-9]*) continue;; esac; " + "if [ \"$fn\" -eq 0 ]; then fmin=$v; fmax=$v; fi; " + "[ \"$v\" -lt \"$fmin\" ] && fmin=$v; " + "[ \"$v\" -gt \"$fmax\" ] && fmax=$v; " + "fs=$((fs+v)); fn=$((fn+1)); " + "done; " + "printf 'F\t%s\t%s\t%s\t%s\n' \"$fs\" \"$fn\" \"$fmin\" \"$fmax\"; " + "printf 'X\t%s\t%s\n' \"$(cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq 2>/dev/null)\" " + "\"$(cat /sys/devices/system/cpu/cpu0/cpufreq/base_frequency 2>/dev/null)\"; " + "printf 'G\t%s\n' \"$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)\"; " + "printf 'E\t%s\n' \"$(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference 2>/dev/null)\"; " + "set -- $(cat /proc/loadavg); " + "printf 'L\t%s\t%s\t%s\n' \"$1\" \"$2\" \"$3\"; " + "m=$(awk -F: '/model name/{sub(/^[ \\t]+/,\"\",$2); print $2; exit}' /proc/cpuinfo); " + "[ -n \"$m\" ] || m=$(awk -F: '/^Model|^Hardware/{sub(/^[ \\t]+/,\"\",$2); print $2; exit}' /proc/cpuinfo); " + "cl=$(grep -c '^processor' /proc/cpuinfo); " + "cp=$(awk -F: '/physical id/{gsub(/[ \\t]/,\"\",$2); s=$2} " + "/core id/{gsub(/[ \\t]/,\"\",$2); print s\":\"$2}' /proc/cpuinfo | sort -u | wc -l); " + "cl=$((cl+0)); cp=$((cp+0)); " + "printf 'M\t%s\n' \"$m\"; " + "printf 'C\t%s\t%s\n' \"$cl\" \"$cp\"; " + "fr=-1; ffound=0; " + "for f in /sys/class/hwmon/hwmon*/fan*_input; do " + "[ -r \"$f\" ] || continue; " + "v=$(cat \"$f\" 2>/dev/null); " + "case \"$v\" in ''|*[!0-9]*) continue;; esac; " + "if [ \"$ffound\" -eq 0 ] || [ \"$v\" -gt \"$fr\" ]; then fr=$v; fi; " + "ffound=1; " + "done; " + "[ \"$ffound\" -eq 1 ] || fr=-1; " + "printf 'R\t%s\n' \"$fr\"; " + "printf 'S\n'; " + "grep '^cpu' /proc/stat"
 
     Component.onCompleted: root.poll()
 

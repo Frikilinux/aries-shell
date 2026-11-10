@@ -29,8 +29,7 @@ Item {
     // Carrier present even with no active connection (dimmer, not "off").
     readonly property bool wiredLinked: activeWired !== null && activeWired.hasLink
     // rfkill switch (sw) or the radio itself (hw) turned off.
-    readonly property bool wifiOff: !Networking.wifiEnabled
-        || !Networking.wifiHardwareEnabled
+    readonly property bool wifiOff: !Networking.wifiEnabled || !Networking.wifiHardwareEnabled
 
     readonly property string wifiGlyph: {
         if (wifiConnected) {
@@ -39,8 +38,10 @@ Item {
                 return NetworkDevices.signalGlyph(n.signalStrength)
         }
         if (wifiOff)
-            return "\ue067" // wifi-off
-        return "\ue069"     // wifi-warning (enabled, not connected)
+            return "\ue067"
+        // wifi-off
+        return "\ue069"
+        // wifi-warning (enabled, not connected)
     }
 
     implicitWidth: row.implicitWidth
@@ -115,7 +116,7 @@ Item {
                 Icon {
                     anchors.centerIn: parent
                     glyph: "\ue081" // shield
-                    color: Theme.urgentColor
+                    color: Theme.fgBarColor
                     font.pixelSize: 11
                 }
             }

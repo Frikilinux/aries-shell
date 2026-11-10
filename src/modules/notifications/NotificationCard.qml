@@ -213,14 +213,15 @@ Item {
             font.pixelSize: Theme.fontSize - 2
         }
 
-        // Action buttons, if the client sent any.
+        // Action buttons, if the client sent any (skip empty-labelled ones such
+        // as the freedesktop "default" action with no text).
         Row {
             width: parent.width
             spacing: 6
-            visible: card.entry.actions.length > 0
+            visible: (card.entry.actions || []).some(a => a && (a.text || "").trim() !== "")
 
             Repeater {
-                model: card.entry.actions
+                model: (card.entry.actions || []).filter(a => a && (a.text || "").trim() !== "")
                 delegate: ActionButton {}
             }
         }

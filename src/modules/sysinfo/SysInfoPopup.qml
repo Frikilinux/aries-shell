@@ -17,22 +17,15 @@ BarPopup {
     readonly property color tempColor: Theme.temperatureColor(popup.temperature, Theme.fgColor)
 
     // Gauge readings (display strings + 0..1 ring progress)
-    readonly property string tempValue: SysInfoService.hasTemp
-        ? Math.round(popup.temperature) : "\u2014"
-    readonly property real tempRatio: SysInfoService.hasTemp
-        ? Math.max(0, Math.min(1, popup.temperature / Math.max(1, SysInfoService.critTemp))) : 0
+    readonly property string tempValue: SysInfoService.hasTemp ? Math.round(popup.temperature) + "\u00b0" : "\u2014"
+    readonly property real tempRatio: SysInfoService.hasTemp ? Math.max(0, Math.min(1, popup.temperature / Math.max(1, SysInfoService.critTemp))) : 0
 
-    readonly property string loadValue: SysInfoService.usageReady
-        ? Math.round(SysInfoService.usage) : "\u2014"
-    readonly property real loadRatio: SysInfoService.usageReady
-        ? SysInfoService.usage / 100 : 0
+    readonly property string fanValue: SysInfoService.hasFan ? SysInfoService.fanRPM : "\u2014"
+    readonly property real fanRatio: SysInfoService.hasFan ? Math.max(0, Math.min(1, SysInfoService.fanRPM / 3200)) : 0
 
-    readonly property string freqValue: SysInfoService.hasFreq
-        ? (SysInfoService.freqMHz / 1000).toFixed(1) : "\u2014"
-    readonly property real freqScale: SysInfoService.maxFreqMHz > 0 ? SysInfoService.maxFreqMHz
-        : (SysInfoService.freqMaxMHz > 0 ? SysInfoService.freqMaxMHz : 5000)
-    readonly property real freqRatio: SysInfoService.hasFreq
-        ? Math.max(0, Math.min(1, SysInfoService.freqMHz / Math.max(1, popup.freqScale))) : 0
+    readonly property string freqValue: SysInfoService.hasFreq ? (SysInfoService.freqMHz / 1000).toFixed(1) : "\u2014"
+    readonly property real freqScale: SysInfoService.maxFreqMHz > 0 ? SysInfoService.maxFreqMHz : (SysInfoService.freqMaxMHz > 0 ? SysInfoService.freqMaxMHz : 4200)
+    readonly property real freqRatio: SysInfoService.hasFreq ? Math.max(0, Math.min(1, SysInfoService.freqMHz / Math.max(1, popup.freqScale))) : 0
 
     function popupOpened() {
         SysInfoService.detail = true
@@ -69,15 +62,6 @@ BarPopup {
             spacing: 12
 
             Icon {
-                glyph: "\ue01a" // arrow-clockwise (refresh)
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: SysInfoService.refresh()
-                }
-            }
-
-            Icon {
                 glyph: "\ue02f" // dismiss
                 MouseArea {
                     anchors.fill: parent
@@ -105,8 +89,7 @@ BarPopup {
         implicitHeight: ringSize + labelText.implicitHeight + 7
 
         function css(c, a) {
-            return "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255)
-                + "," + Math.round(c.b * 255) + "," + a + ")"
+            return "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + a + ")"
         }
 
         Item {
@@ -142,7 +125,6 @@ BarPopup {
                     ctx.clearRect(0, 0, w, h)
                     if (w <= 0 || h <= 0)
                         return
-
                     const lw = Math.max(3, Math.round(Math.min(w, h) * 0.08))
                     const r = (Math.min(w, h) - lw) / 2
                     const cx = w / 2
@@ -167,22 +149,25 @@ BarPopup {
                 }
             }
 
-            Row {
+            Column {
                 anchors.centerIn: parent
-                spacing: 2
+                spacing: 0
 
                 Text {
                     id: gaugeValue
+                    anchors.horizontalCenter: parent.horizontalCenter
                     text: gauge.valueText
                     color: gauge.valueColor
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSize + 5
                     font.bold: true
-                    font.features: { "tnum": 1 }
+                    font.features: {
+                        "tnum": 1
+                    }
                 }
 
                 Text {
-                    anchors.baseline: gaugeValue.baseline
+                    anchors.horizontalCenter: parent.horizontalCenter
                     text: gauge.unitText
                     visible: gauge.unitText !== ""
                     color: Theme.fgColorMuted
@@ -216,19 +201,10 @@ BarPopup {
             width: (parent.width - parent.spacing * 2) / 3
             label: "TEMP"
             valueText: popup.tempValue
-            unitText: "\u00b0C"
+            unitText: "Celsius"
             ratio: popup.tempRatio
             ringColor: Theme.accentColor
             valueColor: popup.tempColor
-        }
-
-        CircleGauge {
-            width: (parent.width - parent.spacing * 2) / 3
-            label: "LOAD"
-            valueText: popup.loadValue
-            unitText: "%"
-            ratio: popup.loadRatio
-            ringColor: Theme.accentColor
         }
 
         CircleGauge {
@@ -237,6 +213,15 @@ BarPopup {
             valueText: popup.freqValue
             unitText: "GHz"
             ratio: popup.freqRatio
+            ringColor: Theme.accentColor
+        }
+
+        CircleGauge {
+            width: (parent.width - parent.spacing * 2) / 3
+            label: "FAN"
+            valueText: popup.fanValue
+            unitText: "rpm"
+            ratio: popup.fanRatio
             ringColor: Theme.accentColor
         }
     }
@@ -251,7 +236,7 @@ BarPopup {
 
         Column {
             id: coreChart
-            width: Math.round((popup.contentWidth - chartsRow.spacing) * 0.42)
+            width: Math.round((popup.contentWidth - chartsRow.spacing) / 2)
             spacing: 4
 
             Text {
@@ -295,14 +280,12 @@ BarPopup {
 
                             // Computed here (like `height`): a barWidth property on
                             // coreBars gets its binding dropped as a loop -> 0.
-                            width: Math.max(2, Math.floor((coreBars.width
-                                - coreBars.gap * (coreBars.coreCount - 1)) / coreBars.coreCount))
+                            width: Math.max(2, Math.floor((coreBars.width - coreBars.gap * (coreBars.coreCount - 1)) / coreBars.coreCount))
                             height: Math.max(2, Math.round(coreBars.height * modelData / 100))
-                            x: index * (width + coreBars.gap)
+                            x: Math.round((coreBars.width - (coreBars.coreCount * width + coreBars.gap * (coreBars.coreCount - 1))) / 2) + index * (width + coreBars.gap)
                             anchors.bottom: coreBars.bottom
                             radius: 1
-                            color: Qt.rgba(Theme.accentColor.r, Theme.accentColor.g,
-                                           Theme.accentColor.b, 0.5 + 0.5 * modelData / 100)
+                            color: Qt.rgba(Theme.accentColor.r, Theme.accentColor.g, Theme.accentColor.b, 0.5 + 0.5 * modelData / 100)
                         }
                     }
                 }
@@ -354,8 +337,7 @@ BarPopup {
                     anchors.margins: 5
 
                     function css(c, a) {
-                        return "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255)
-                            + "," + Math.round(c.b * 255) + "," + a + ")"
+                        return "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + a + ")"
                     }
 
                     onPaint: {
@@ -482,7 +464,9 @@ BarPopup {
             horizontalAlignment: Text.AlignRight
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSize - 1
-            font.features: { "tnum": 1 }
+            font.features: {
+                "tnum": 1
+            }
         }
     }
 
@@ -497,5 +481,4 @@ BarPopup {
         glyph: "\ue084" // chart-bars
         value: SysInfoService.formatLoad()
     }
-
 }

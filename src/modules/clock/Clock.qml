@@ -32,8 +32,17 @@ Item {
     implicitWidth: content.implicitWidth
     implicitHeight: content.implicitHeight
 
+    // The popup window, exposed for shell.qml.
+    property alias popup: clockPopup
+
     // Module is visible only if outputs property is unset, matches this output, or contains it
     visible: !outputs || (Array.isArray(outputs) ? outputs.includes(output) : outputs === output)
+
+    MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        onClicked: clock.popup.visible = !clock.popup.visible
+    }
 
     SystemClock {
         id: systemClock
@@ -50,7 +59,9 @@ Item {
             color: clock.color
             font.family: clock.fontFamily
             font.pixelSize: clock.fontSize
-            font.features: clock.tabularNumbers ? ({ "tnum": 1 }) : ({})
+            font.features: clock.tabularNumbers ? ({
+                    "tnum": 1
+                }) : ({})
             text: Qt.formatDateTime(systemClock.date, clock.dateFormat)
         }
 
@@ -58,9 +69,15 @@ Item {
             color: clock.color
             font.family: clock.fontFamily
             font.pixelSize: clock.fontSize
-            font.features: clock.tabularNumbers ? ({ "tnum": 1 }) : ({})
+            font.features: clock.tabularNumbers ? ({
+                    "tnum": 1
+                }) : ({})
             text: Qt.formatDateTime(systemClock.date, clock.timeFormat)
         }
+    }
 
+    ClockPopup {
+        id: clockPopup
+        anchorItem: clock
     }
 }

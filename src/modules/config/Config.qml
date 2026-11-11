@@ -168,7 +168,9 @@ Singleton {
                 clock: {
                     outputs: ["primary"],
                     timeFormat: "HH:mm",
-                    showDate: true
+                    showDate: true,
+                    calendarDays: 7,
+                    calendarMaxEvents: 50
                 },
                 notifications: {
                     outputs: ["primary"],

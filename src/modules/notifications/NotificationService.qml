@@ -247,7 +247,11 @@ Singleton {
         } else if (String(identifier).indexOf("folder:") === 0) {
             Quickshell.execDetached(["xdg-open", String(identifier).slice(7)])
         }
-        root.dismissEntry(id)
+        // Defer the dismissal so the invoked action's D-Bus message is flushed
+        // before the notification is torn down (avoids a dead/no-op button).
+        Qt.callLater(function () {
+            root.dismissEntry(id)
+        })
     }
 
     // Focus the window that sent `entry`, matching its desktop entry / app name
@@ -603,7 +607,10 @@ Singleton {
             desktopEntry: entry.desktopEntry,
             urgency: entry.urgency,
             time: entry.time,
-            actions: (entry.actions || []).filter(a => (a && (a.text || "").trim() !== "")),
+            // Only persist actions that stay invocable after a restart (file
+            // open/folder); server actions need a live Notification object and
+            // are dropped so the history never shows dead buttons.
+            actions: (entry.actions || []).filter(a => a && (a.text || "").trim() !== "" && (String(a.identifier || "").indexOf("open:") === 0 || String(a.identifier || "").indexOf("folder:") === 0)),
             // Phone origin (deviceId/notificationId) so the entry keeps being
             // updated by the daemon after a shell restart instead of duplicated.
             external: entry.external

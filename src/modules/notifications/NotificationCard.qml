@@ -214,14 +214,15 @@ Item {
         }
 
         // Action buttons, if the client sent any (skip empty-labelled ones such
-        // as the freedesktop "default" action with no text).
+        // as the freedesktop "default" action with no text, and actions that can
+        // no longer be invoked, e.g. server actions after the toast is gone).
         Row {
             width: parent.width
             spacing: 6
-            visible: (card.entry.actions || []).some(a => a && (a.text || "").trim() !== "")
+            visible: (card.entry.actions || []).some(a => a && (a.text || "").trim() !== "" && (String(a.identifier || "").indexOf("open:") === 0 || String(a.identifier || "").indexOf("folder:") === 0 || card.entry.notification !== null))
 
             Repeater {
-                model: (card.entry.actions || []).filter(a => a && (a.text || "").trim() !== "")
+                model: (card.entry.actions || []).filter(a => a && (a.text || "").trim() !== "" && (String(a.identifier || "").indexOf("open:") === 0 || String(a.identifier || "").indexOf("folder:") === 0 || card.entry.notification !== null))
                 delegate: ActionButton {}
             }
         }

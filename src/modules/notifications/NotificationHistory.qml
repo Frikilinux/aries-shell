@@ -122,10 +122,10 @@ BarPopup {
             Row {
                 width: parent.width
                 spacing: 6
-                visible: (row.entry.actions || []).some(a => a && (a.text || "").trim() !== "")
+                visible: (row.entry.actions || []).some(a => a && (a.text || "").trim() !== "" && (String(a.identifier || "").indexOf("open:") === 0 || String(a.identifier || "").indexOf("folder:") === 0 || row.entry.notification !== null))
 
                 Repeater {
-                    model: (row.entry.actions || []).filter(a => a && (a.text || "").trim() !== "")
+                    model: (row.entry.actions || []).filter(a => a && (a.text || "").trim() !== "" && (String(a.identifier || "").indexOf("open:") === 0 || String(a.identifier || "").indexOf("folder:") === 0 || row.entry.notification !== null))
 
                     delegate: Chip {
                         required property var modelData

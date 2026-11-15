@@ -254,6 +254,23 @@ Singleton {
         })
     }
 
+    // Body click: run the freedesktop "default" action when the sender offers
+    // one, otherwise just dismiss. "default" is the action a client means by
+    // "clicking the notification" (Hylki opens the message, browsers focus the
+    // tab…). It carries an empty label, so it is filtered out of the buttons
+    // and only reachable from here; the target lives inside the client, which
+    // is why it must be invoked literally instead of being rebuilt.
+    function activateEntry(id) {
+        const entry = root.entryById(id)
+        if (entry === null)
+            return
+        if (entry.notification !== null && entry.hasDefault) {
+            root.invokeAction(id, "default")
+            return
+        }
+        root.dismissEntry(id)
+    }
+
     // Focus the window that sent `entry`, matching its desktop entry / app name
     // against niri's windows. No-op when niri is unavailable or nothing matches
     // (e.g. a notify-send script with no window).
@@ -292,6 +309,9 @@ Singleton {
         entry.desktopEntry = notification.desktopEntry || ""
         entry.urgency = notification.urgency
         entry.actions = root._actionsOf(notification)
+        // The body-click action. Kept out of `actions` (empty label) and not
+        // persisted: it only works while the live server object exists.
+        entry.hasDefault = (notification.actions || []).some(a => a && a.identifier === "default")
         // A (re)delivered notification is unread again.
         entry.unread = true
 
@@ -812,6 +832,8 @@ Singleton {
         property string desktopEntry: ""
         property int urgency: NotificationUrgency.Normal
         property var actions: []
+        // The sender offers the freedesktop "default" action (body click).
+        property bool hasDefault: false
         // Phone origin ({ deviceId, notificationId }) for aries-connect entries;
         // null for local server notifications.
         property var external: null

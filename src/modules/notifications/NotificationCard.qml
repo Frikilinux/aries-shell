@@ -8,7 +8,8 @@ import "../icon"
 import "../widgets"
 
 // One toast card inside the notification stack. The border color encodes the
-// notification urgency; clicking dismisses, hovering pauses the auto-timeout.
+// notification urgency; clicking runs the notification's "default" action (or
+// dismisses when it has none), hovering pauses the auto-timeout.
 Item {
     id: card
 
@@ -75,15 +76,16 @@ Item {
         border.color: card.borderColor
     }
 
-    // Background click dismisses; declared first so the action buttons (below)
-    // sit on top and receive their own clicks.
+    // Background click runs the notification's "default" action (or dismisses
+    // when it has none); declared first so the action buttons (below) sit on
+    // top and receive their own clicks.
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onEntered: NotificationService.pauseEntry(card.entry.entryId)
         onExited: NotificationService.resumeEntry(card.entry.entryId)
-        onClicked: NotificationService.dismissEntry(card.entry.entryId)
+        onClicked: NotificationService.activateEntry(card.entry.entryId)
     }
 
     Column {

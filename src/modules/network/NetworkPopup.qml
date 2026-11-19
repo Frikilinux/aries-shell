@@ -71,7 +71,13 @@ BarPopup {
             const p = raw.split("\t")
             if (p[0] === "C" && p.length >= 7) {
                 // C <iface> <freq> <width> <rate> <signal> <ip>
-                links[p[1]] = { freq: p[2], width: p[3], rate: p[4], signal: p[5], ip: p[6] }
+                links[p[1]] = {
+                    freq: p[2],
+                    width: p[3],
+                    rate: p[4],
+                    signal: p[5],
+                    ip: p[6]
+                }
             } else if (p[0] === "A" && p.length >= 3) {
                 // A <iface> <nmcli SSID:FREQ line>
                 const fields = NetworkDevices.splitTerse(p[2])
@@ -115,7 +121,12 @@ BarPopup {
                 continue
             const p = raw.split("\t")
             if (p[0] === "E" && p.length >= 6)
-                map[p[1]] = { speed: parseInt(p[2], 10), duplex: p[3], port: p[4], ip: p[5] }
+                map[p[1]] = {
+                    speed: parseInt(p[2], 10),
+                    duplex: p[3],
+                    port: p[4],
+                    ip: p[5]
+                }
         }
         popup.wiredMap = map
     }
@@ -245,7 +256,8 @@ BarPopup {
         passwordFailed = false
     }
 
-    onDevicesChanged: if (popup.visible) refreshWifiInfo()
+    onDevicesChanged: if (popup.visible)
+        refreshWifiInfo()
 
     // Wrong PSK / auth rejection: keep asking until the password works.
     Connections {
@@ -262,9 +274,7 @@ BarPopup {
             const net = popup.connectingNetwork
             if (net === null)
                 return
-            if (reason === ConnectionFailReason.NoSecrets
-                || reason === ConnectionFailReason.WifiAuthTimeout
-                || reason === ConnectionFailReason.WifiClientFailed) {
+            if (reason === ConnectionFailReason.NoSecrets || reason === ConnectionFailReason.WifiAuthTimeout || reason === ConnectionFailReason.WifiClientFailed) {
                 popup.passwordFailed = true
                 popup.pendingNetwork = net
                 popup.password = ""
@@ -309,30 +319,7 @@ BarPopup {
     // `scannerEnabled`, so no explicit `nmcli ... rescan` is needed.
     Process {
         id: wifiInfoProcess
-        command: ["/bin/sh", "-c",
-            "for i in /sys/class/net/*; do\n"
-            + "  iface=${i##*/}\n"
-            + "  [ -d \"$i/wireless\" ] || continue\n"
-            + "  nmcli -t -f SSID,FREQ device wifi list ifname \"$iface\" --rescan no 2>/dev/null | while IFS= read -r line; do\n"
-            + "    printf 'A\\t%s\\t%s\\n' \"$iface\" \"$line\"\n"
-            + "  done\n"
-            + "  ip=$(ip -4 -o addr show dev \"$iface\" 2>/dev/null | awk '{ split($4, a, \"/\"); print a[1]; exit }')\n"
-            + "  link=$(iw dev \"$iface\" link 2>/dev/null)\n"
-            + "  case \"$link\" in\n"
-            + "  \"Connected to\"*)\n"
-            + "    info=$(iw dev \"$iface\" info 2>/dev/null)\n"
-            + "    printf '%s\\n%s\\n' \"$link\" \"$info\" | awk -v iface=\"$iface\" -v ip=\"$ip\" '\n"
-            + "      /^Connected/ { conn = 1 }\n"
-            + "      /freq:/ && f == \"\" { f = $2 }\n"
-            + "      /signal:/ && s == \"\" { s = $2 }\n"
-            + "      /tx bitrate:/ { r = $3 }\n"
-            + "      /bitrate:/ && r == \"\" { r = $3 }\n"
-            + "      /width:/ && w == \"\" { for (j = 1; j <= NF; j++) if ($j == \"width:\") { w = $(j+1); exit } }\n"
-            + "      END { if (conn) print \"C\\t\" iface \"\\t\" f \"\\t\" w \"\\t\" r \"\\t\" s \"\\t\" ip }\n"
-            + "    '\n"
-            + "    ;;\n"
-            + "  esac\n"
-            + "done"]
+        command: ["/bin/sh", "-c", "for i in /sys/class/net/*; do\n" + "  iface=${i##*/}\n" + "  [ -d \"$i/wireless\" ] || continue\n" + "  nmcli -t -f SSID,FREQ device wifi list ifname \"$iface\" --rescan no 2>/dev/null | while IFS= read -r line; do\n" + "    printf 'A\\t%s\\t%s\\n' \"$iface\" \"$line\"\n" + "  done\n" + "  ip=$(ip -4 -o addr show dev \"$iface\" 2>/dev/null | awk '{ split($4, a, \"/\"); print a[1]; exit }')\n" + "  link=$(iw dev \"$iface\" link 2>/dev/null)\n" + "  case \"$link\" in\n" + "  \"Connected to\"*)\n" + "    info=$(iw dev \"$iface\" info 2>/dev/null)\n" + "    printf '%s\\n%s\\n' \"$link\" \"$info\" | awk -v iface=\"$iface\" -v ip=\"$ip\" '\n" + "      /^Connected/ { conn = 1 }\n" + "      /freq:/ && f == \"\" { f = $2 }\n" + "      /signal:/ && s == \"\" { s = $2 }\n" + "      /tx bitrate:/ { r = $3 }\n" + "      /bitrate:/ && r == \"\" { r = $3 }\n" + "      /width:/ && w == \"\" { for (j = 1; j <= NF; j++) if ($j == \"width:\") { w = $(j+1); exit } }\n" + "      END { if (conn) print \"C\\t\" iface \"\\t\" f \"\\t\" w \"\\t\" r \"\\t\" s \"\\t\" ip }\n" + "    '\n" + "    ;;\n" + "  esac\n" + "done"]
         stdout: StdioCollector {
             onStreamFinished: popup.parseWifiInfo(text)
         }
@@ -342,19 +329,7 @@ BarPopup {
     //   E <iface> <sysfs speed> <duplex> <ethtool Port> <ipv4>
     Process {
         id: wiredProcess
-        command: ["/bin/sh", "-c",
-            "for i in /sys/class/net/*; do\n"
-            + "  iface=${i##*/}\n"
-            + "  [ -d \"$i/wireless\" ] && continue\n"
-            + "  speed=$(cat \"$i/speed\" 2>/dev/null)\n"
-            + "  duplex=$(cat \"$i/duplex\" 2>/dev/null)\n"
-            + "  ip=$(ip -4 -o addr show dev \"$iface\" 2>/dev/null | awk '{ split($4, a, \"/\"); print a[1]; exit }')\n"
-            + "  port=\"\"\n"
-            + "  if command -v ethtool >/dev/null 2>&1; then\n"
-            + "    port=$(ethtool \"$iface\" 2>/dev/null | awk -F': *' '/Port:/ { print $2; exit }')\n"
-            + "  fi\n"
-            + "  printf 'E\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \"$iface\" \"$speed\" \"$duplex\" \"$port\" \"$ip\"\n"
-            + "done"]
+        command: ["/bin/sh", "-c", "for i in /sys/class/net/*; do\n" + "  iface=${i##*/}\n" + "  [ -d \"$i/wireless\" ] && continue\n" + "  speed=$(cat \"$i/speed\" 2>/dev/null)\n" + "  duplex=$(cat \"$i/duplex\" 2>/dev/null)\n" + "  ip=$(ip -4 -o addr show dev \"$iface\" 2>/dev/null | awk '{ split($4, a, \"/\"); print a[1]; exit }')\n" + "  port=\"\"\n" + "  if command -v ethtool >/dev/null 2>&1; then\n" + "    port=$(ethtool \"$iface\" 2>/dev/null | awk -F': *' '/Port:/ { print $2; exit }')\n" + "  fi\n" + "  printf 'E\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \"$iface\" \"$speed\" \"$duplex\" \"$port\" \"$ip\"\n" + "done"]
         stdout: StdioCollector {
             onStreamFinished: popup.parseWired(text)
         }
@@ -469,8 +444,7 @@ BarPopup {
     }
 
     function connectivityColor(conn) {
-        return conn === NetworkConnectivity.Portal
-            ? Theme.accentColor : Theme.urgentColor
+        return conn === NetworkConnectivity.Portal ? Theme.accentColor : Theme.urgentColor
     }
 
     // Header: title + connectivity status + connection editor + close
@@ -586,8 +560,7 @@ BarPopup {
                         anchors.left: vpnName.right
                         anchors.leftMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
-                        text: NetworkDevices.vpnConnections.length === 0 ? "No connections"
-                            : (NetworkDevices.vpnActiveCount > 0 ? "Connected" : "Inactive")
+                        text: NetworkDevices.vpnConnections.length === 0 ? "No connections" : (NetworkDevices.vpnActiveCount > 0 ? "Connected" : "Inactive")
                         color: Theme.fgColorMuted
                         font.pixelSize: Math.round(Theme.fontSize * 0.8)
                         elide: Text.ElideRight
@@ -679,9 +652,7 @@ BarPopup {
                     width: popup.contentWidth
                     height: popup.apRowHeight
                     radius: 6
-                    color: vpnMouse.containsMouse
-                        ? Theme.bgColorHover
-                        : "transparent"
+                    color: vpnMouse.containsMouse ? Theme.bgColorHover : "transparent"
 
                     MouseArea {
                         id: vpnMouse
@@ -758,16 +729,50 @@ BarPopup {
             readonly property bool connected: modelData.connected
             // Mid-transition (NM connect/disconnect in flight). NetworkDevice
             // has no `stateChanging`; derive it from `state`.
-            readonly property bool changing: modelData.state === ConnectionState.Connecting
-                || modelData.state === ConnectionState.Disconnecting
+            readonly property bool changing: modelData.state === ConnectionState.Connecting || modelData.state === ConnectionState.Disconnecting
             readonly property var aps: section.isWifi ? popup.networksOf(section.modelData) : []
             // AP list expanded: wifi sections follow the accordion, wired has none.
-            readonly property bool apsOpen: !section.isWifi
-                || popup.expandedWifi === section.modelData.name
-            readonly property var connectedAp: section.isWifi
-                ? NetworkDevices.connectedNetwork(section.modelData) : null
+            readonly property bool apsOpen: !section.isWifi || popup.expandedWifi === section.modelData.name
+            readonly property var connectedAp: section.isWifi ? NetworkDevices.connectedNetwork(section.modelData) : null
             width: popup.contentWidth
             spacing: 4
+
+            // Wired switch action: connect / disconnect the link (what the
+            // header click used to do). NM only accepts a connect on a managed
+            // device, so a stale nmManaged=false left over from the old switch
+            // is re-enabled first.
+            function toggleWired() {
+                const dev = section.modelData
+                if (dev.connected) {
+                    dev.disconnect()
+                } else if (!dev.nmManaged) {
+                    dev.nmManaged = true
+                    wiredEnabler.restart()
+                } else if (dev.network !== null) {
+                    dev.network.connect()
+                }
+            }
+
+            // Waits for NM to take the device back before connecting (~8 s cap).
+            Timer {
+                id: wiredEnabler
+                interval: 250
+                repeat: true
+                property int tries: 0
+
+                onTriggered: {
+                    if (section.modelData.nmManaged) {
+                        stop()
+                        if (section.modelData.network !== null)
+                            section.modelData.network.connect()
+                    } else if (++tries >= 32) {
+                        stop()
+                    }
+                }
+
+                onRunningChanged: if (running)
+                    tries = 0
+            }
 
             // Header card: header row + the connected AP info share one
             // foreground-tinted background so the AP looks attached to the header.
@@ -790,20 +795,15 @@ BarPopup {
                         height: 30
 
                         // Wifi: click header -> expand this AP list, fold the others.
-                        // Wired: click to connect / disconnect (controls sit on top).
+                        // Wired: the switch is the only control (no header click).
                         MouseArea {
                             anchors.fill: parent
                             anchors.rightMargin: controls.width + 16
+                            enabled: section.isWifi
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                if (section.isWifi) {
-                                    popup.vpnOpen = false
-                                    popup.wifiAccordion = section.modelData.name
-                                } else if (section.modelData.connected) {
-                                    section.modelData.disconnect()
-                                } else if (section.modelData.network !== null) {
-                                    section.modelData.network.connect()
-                                }
+                                popup.vpnOpen = false
+                                popup.wifiAccordion = section.modelData.name
                             }
                         }
 
@@ -840,14 +840,22 @@ BarPopup {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 10
 
-                            // Enable / disable the interface (NetworkManager managed).
+                            // Wifi: enable / disable the interface (NetworkManager
+                            // managed). Wired: connect / disconnect the link --
+                            // the same action the header click used to run, so
+                            // the switch reflects `connected` instead.
                             // Disabled while NM is still flipping the state.
                             // Kept last so it always sits at the far right.
                             Switch {
                                 anchors.verticalCenter: parent.verticalCenter
-                                checked: section.modelData.nmManaged
+                                checked: section.isWifi ? section.modelData.nmManaged : section.connected
                                 enabled: !section.changing
-                                onToggled: section.modelData.nmManaged = !section.modelData.nmManaged
+                                onToggled: {
+                                    if (section.isWifi)
+                                        section.modelData.nmManaged = !section.modelData.nmManaged
+                                    else
+                                        section.toggleWired()
+                                }
                             }
                         }
                     }
@@ -916,8 +924,7 @@ BarPopup {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: 18
                                 horizontalAlignment: Text.AlignHCenter
-                                glyph: section.connectedAp
-                                    ? NetworkDevices.signalGlyph(section.connectedAp.signalStrength) : ""
+                                glyph: section.connectedAp ? NetworkDevices.signalGlyph(section.connectedAp.signalStrength) : ""
                                 color: Theme.accentColor
                                 opacity: 0.8
                             }
@@ -953,9 +960,7 @@ BarPopup {
                 id: apsFlick
                 visible: section.isWifi && section.apsOpen && section.aps.length > 0
                 width: parent.width
-                height: Math.min(apsColumn.implicitHeight,
-                    popup.maxApRows * popup.apRowHeight
-                        + popup.apRowSpacing * (popup.maxApRows - 1))
+                height: Math.min(apsColumn.implicitHeight, popup.maxApRows * popup.apRowHeight + popup.apRowSpacing * (popup.maxApRows - 1))
                 contentWidth: width
                 contentHeight: apsColumn.implicitHeight
                 clip: true
@@ -981,9 +986,7 @@ BarPopup {
                             width: popup.contentWidth
                             height: popup.apRowHeight
                             radius: 6
-                            color: apMouse.containsMouse
-                                ? Theme.bgColorHover
-                                : "transparent"
+                            color: apMouse.containsMouse ? Theme.bgColorHover : "transparent"
 
                             onPromptingChanged: if (prompting)
                                 Qt.callLater(() => passwordField.forceActiveFocus())
@@ -1010,8 +1013,7 @@ BarPopup {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 18
                                     horizontalAlignment: Text.AlignHCenter
-                                    glyph: apRow.connected ? "\ue029"
-                                        : (NetworkDevices.isOpen(apRow.modelData) ? "\ue065" : "\ue066")
+                                    glyph: apRow.connected ? "\ue029" : (NetworkDevices.isOpen(apRow.modelData) ? "\ue065" : "\ue066")
                                     color: apRow.connected ? Theme.accentColor : Theme.fgColor
                                     opacity: apRow.connected ? 1 : 0.7
                                 }
@@ -1036,8 +1038,7 @@ BarPopup {
 
                                     Text {
                                         width: parent.width
-                                        text: apRow.changing ? "Connecting…"
-                                            : popup.apInfo(apRow.modelData)
+                                        text: apRow.changing ? "Connecting…" : popup.apInfo(apRow.modelData)
                                         color: Theme.fgColor
                                         opacity: apRow.changing ? 0.9 : 0.6
                                         font.family: Theme.fontFamily

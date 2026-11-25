@@ -1,4 +1,5 @@
 module modules.widgets
 Switch 1.0 Switch.qml
+Radio 1.0 Radio.qml
 Chip 1.0 Chip.qml
 Pill 1.0 Pill.qml

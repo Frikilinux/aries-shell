@@ -4,24 +4,20 @@ import QtQuick
 import "../theme"
 import "../icon"
 import "../popup"
+import "../widgets"
 
 BarPopup {
     id: popup
-
-    // Selectable charge profiles (end threshold, %)
-    property var profiles: [60, 80, 100]
 
     readonly property bool showPower: Math.abs(BatteryService.changeRate) >= 0.05
     readonly property string powerLabel: BatteryService.discharging ? "Consumption" : "Charge"
     readonly property string powerText: Math.abs(BatteryService.changeRate).toFixed(1) + " W"
 
     readonly property string timeLabel: BatteryService.discharging ? "Time remaining" : "Time to full"
-    readonly property string timeText: popup.formatDuration(
-        BatteryService.discharging ? BatteryService.timeToEmpty : BatteryService.timeToFull)
+    readonly property string timeText: popup.formatDuration(BatteryService.discharging ? BatteryService.timeToEmpty : BatteryService.timeToFull)
 
     readonly property bool showHealth: BatteryService.healthPercentage >= 0
-    readonly property string energyText: BatteryService.energy.toFixed(1) + " / "
-        + BatteryService.energyCapacity.toFixed(1) + " Wh"
+    readonly property string energyText: BatteryService.energy.toFixed(1) + " / " + BatteryService.energyCapacity.toFixed(1) + " Wh"
     readonly property string healthText: Math.round(BatteryService.healthPercentage) + "%"
 
     function formatDuration(seconds) {
@@ -38,6 +34,7 @@ BarPopup {
     function popupOpened() {
         BatteryService.applyError = ""
         BatteryService.refresh()
+        BatteryService.refreshScheduler()
     }
 
     component InfoRow: Item {
@@ -63,7 +60,9 @@ BarPopup {
             color: Theme.fgColor
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSize - 1
-            font.features: { "tnum": 1 }
+            font.features: {
+                "tnum": 1
+            }
         }
     }
 
@@ -92,7 +91,10 @@ BarPopup {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: BatteryService.refresh()
+                    onClicked: {
+                        BatteryService.refresh()
+                        BatteryService.refreshScheduler()
+                    }
                 }
             }
 
@@ -117,9 +119,7 @@ BarPopup {
         font.pixelSize: Theme.fontSize
     }
 
-    // Current charge summary: icon + % on the left, power-profile button
-    // at the right edge of the percentage line (an Item wrapper so the
-    // summary can be laid out with anchors).
+    // Current charge summary: battery icon + percentage + state line.
     Item {
         visible: BatteryService.present
         width: parent.width
@@ -132,7 +132,6 @@ BarPopup {
             spacing: 14
 
             Icon {
-                id: summaryIcon
                 anchors.verticalCenter: parent.verticalCenter
                 glyph: BatteryService.batteryGlyph(BatteryService.percentage, BatteryService.pluggedIn)
                 color: BatteryService.charging ? Theme.accentColor : Theme.fgColor
@@ -143,59 +142,19 @@ BarPopup {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 1
 
-                // Percentage line: value at the left, power-profile button
-                // at the right, both anchored to THIS line so the button is
-                // centered exactly with the value.
-                Item {
-                    id: percentLine
-                    width: popup.contentWidth - summaryIcon.width - summaryRow.spacing
-                    implicitHeight: Math.max(percentText.implicitHeight, powerProfileButton.height)
-
-                    Text {
-                        id: percentText
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: Math.round(BatteryService.percentage) + "%"
-                        color: Theme.fgColor
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSize + 11
-                        font.bold: true
-                        font.features: { "tnum": 1 }
-                    }
-
-                    // Power-profiles-daemon button: current profile name,
-                    // colored by profile (red/blue/green); click cycles.
-                    Rectangle {
-                        id: powerProfileButton
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: powerProfileText.implicitWidth + 14
-                        height: 20
-                        radius: 5
-                        color: Qt.rgba(BatteryService.powerProfileColor.r, BatteryService.powerProfileColor.g, BatteryService.powerProfileColor.b, 0.5)
-                        border.width: 1
-                        border.color: Theme.borderColorRest
-
-                        Text {
-                            id: powerProfileText
-                            anchors.centerIn: parent
-                            text: BatteryService.powerProfileLabel
-                            color: Theme.fgColor
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSize - 4
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: BatteryService.cyclePowerProfile()
-                        }
+                Text {
+                    text: Math.round(BatteryService.percentage) + "%"
+                    color: Theme.fgColor
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSize + 11
+                    font.bold: true
+                    font.features: {
+                        "tnum": 1
                     }
                 }
 
                 Text {
-                    text: BatteryService.stateText
-                        + (BatteryService.limitActive ? "   ·   Limit " + BatteryService.endThreshold + "%" : "")
+                    text: BatteryService.stateText + (BatteryService.limitActive ? "   ·   Limit " + BatteryService.endThreshold + "%" : "")
                     color: BatteryService.charging ? Theme.accentColor : Theme.fgColor
                     opacity: 0.8
                     font.family: Theme.fontFamily
@@ -232,7 +191,16 @@ BarPopup {
         visible: popup.showHealth
     }
 
-    // Charge limits / profiles
+    // sched_ext scheduler attached by scx_loader (CachyOS).
+    InfoRow {
+        label: "Scheduler"
+        value: BatteryService.schedulerLabel
+        visible: BatteryService.schedulerActive
+    }
+
+    // Charge limits: libadwaita radio list -- one boxed group, one row per
+    // preset (radio + title + window), the whole row selects. Thin divider
+    // above separates the read-only info from the controls.
     Rectangle {
         width: parent.width
         height: 1
@@ -260,45 +228,116 @@ BarPopup {
         font.pixelSize: Theme.fontSize - 2
     }
 
-    Row {
+    Rectangle {
+        id: profileGroup
         visible: BatteryService.thresholdSupported
         width: parent.width
-        spacing: 8
+        implicitHeight: profileColumn.implicitHeight
+        // libadwaita boxed list: one lighter surface, no border, no gaps; the
+        // rows only draw hairline separators between themselves.
+        radius: 6
+        color: Qt.alpha(Theme.fgColor, 0.05)
+        opacity: BatteryService.applying ? 0.5 : 1
 
-        Repeater {
-            model: popup.profiles
+        Column {
+            id: profileColumn
+            width: parent.width
+            spacing: 0
 
-            delegate: Rectangle {
-                id: profileButton
-                required property int modelData
+            Repeater {
+                model: BatteryService.profiles
 
-                readonly property bool active: BatteryService.endThreshold === modelData
-                width: (popup.contentWidth - 2 * parent.spacing) / 3
-                height: 30
-                radius: 6
-                color: active
-                    ? Theme.accentColor
-                    : Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.08)
-                border.width: 1
-                border.color: active
-                    ? Theme.accentColor
-                    : Qt.rgba(Theme.fgColor.r, Theme.fgColor.g, Theme.fgColor.b, 0.25)
-                opacity: BatteryService.applying ? 0.5 : 1
+                delegate: Item {
+                    id: profileRow
+                    required property var modelData
+                    required property int index
+                    // Selected from the live thresholds, never from local state:
+                    // a window changed outside the shell deselects every row.
+                    readonly property bool active: BatteryService.startThreshold === modelData.start && BatteryService.endThreshold === modelData.end
+                    readonly property bool first: index === 0
+                    readonly property bool last: index === BatteryService.profiles.length - 1
+                    width: parent.width
+                    height: 54
 
-                Text {
-                    anchors.centerIn: parent
-                    text: profileButton.modelData + "%"
-                    color: profileButton.active ? Theme.bgColor : Theme.fgColor
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize - 1
-                    font.features: { "tnum": 1 }
-                }
+                    // Hover fill, clipped by hand: the first/last rows follow the
+                    // group's rounded corners instead of a hard rectangle.
+                    Rectangle {
+                        anchors.fill: parent
+                        topLeftRadius: profileRow.first ? profileGroup.radius : 0
+                        topRightRadius: profileRow.first ? profileGroup.radius : 0
+                        bottomLeftRadius: profileRow.last ? profileGroup.radius : 0
+                        bottomRightRadius: profileRow.last ? profileGroup.radius : 0
+                        color: rowHover.hovered && !BatteryService.applying ? Qt.alpha(Theme.fgColor, 0.10) : "transparent"
 
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: !BatteryService.applying
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: BatteryService.applyProfile(profileButton.modelData)
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 120
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                    }
+
+                    HoverHandler {
+                        id: rowHover
+                    }
+
+                    // Whole row is the hit target (libadwaita activatable row).
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: !BatteryService.applying
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: BatteryService.applyProfile(profileRow.modelData)
+                    }
+
+                    // libadwaita radio (shared control, see widgets/Radio.qml):
+                    // muted ring when off, accent disc + light dot when on.
+                    Radio {
+                        id: radio
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        checked: profileRow.active
+                    }
+
+                    Column {
+                        anchors.left: radio.right
+                        anchors.leftMargin: 12
+                        anchors.right: parent.right
+                        anchors.rightMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 1
+
+                        Text {
+                            width: parent.width
+                            text: profileRow.modelData.title
+                            color: Theme.fgColor
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSize - 1
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            width: parent.width
+                            text: profileRow.modelData.range
+                            color: Theme.fgColor
+                            opacity: 0.6
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSize - 5
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    // Hairline between rows, inset to the text column
+                    // (12 pad + 18 radio + 12 gap) so it starts at the title.
+                    Rectangle {
+                        visible: !profileRow.last
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.leftMargin: 42
+                        height: 1
+                        color: Qt.alpha(Theme.bgBarColor, 0.85)
+                    }
                 }
             }
         }

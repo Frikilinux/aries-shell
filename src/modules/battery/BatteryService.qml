@@ -33,10 +33,7 @@ Singleton {
     readonly property bool full: state === UPowerDeviceState.FullyCharged
 
     // Charger connected (charging, full, waiting at a limit, or AC online)
-    readonly property bool pluggedIn: present && (!UPower.onBattery
-        || state === UPowerDeviceState.Charging
-        || state === UPowerDeviceState.FullyCharged
-        || state === UPowerDeviceState.PendingCharge)
+    readonly property bool pluggedIn: present && (!UPower.onBattery || state === UPowerDeviceState.Charging || state === UPowerDeviceState.FullyCharged || state === UPowerDeviceState.PendingCharge)
 
     // sysfs node for charge thresholds, e.g. BAT0 -> /sys/class/power_supply/BAT0
     readonly property string batteryName: {
@@ -54,8 +51,7 @@ Singleton {
     readonly property bool thresholdSupported: endThreshold >= 0
     readonly property bool limitActive: thresholdSupported && endThreshold > 0 && endThreshold < 100
     // Plugged in and no longer charging because the end threshold was reached
-    readonly property bool atLimit: thresholdSupported && pluggedIn && !charging
-        && percentage >= endThreshold
+    readonly property bool atLimit: thresholdSupported && pluggedIn && !charging && percentage >= endThreshold
 
     property string applyError: ""
     readonly property bool applying: applyProcess.running
@@ -80,39 +76,65 @@ Singleton {
             if (root.startThreshold === root.pendingStart && root.endThreshold === root.pendingEnd) {
                 root.applyError = ""
             } else {
-                root.applyError = "Hardware rejected the thresholds: got "
-                    + root.startThreshold + "-" + root.endThreshold + "%, expected "
-                    + root.pendingStart + "-" + root.pendingEnd + "%"
+                root.applyError = "Hardware rejected the thresholds: got " + root.startThreshold + "-" + root.endThreshold + "%, expected " + root.pendingStart + "-" + root.pendingEnd + "%"
             }
             root.pendingStart = -1
             root.pendingEnd = -1
         }
     }
 
-    // Apply a charge profile by writing the start/end thresholds as root.
-    // The shell script receives the paths/values as positional arguments so
-    // they are never interpreted by the shell. Firmware requires start to be at
-    // least 5% below end, so when raising the profile the end threshold must be
-    // written first (and when lowering it, the start first); otherwise the
-    // intermediate state is invalid and gets reverted.
-    function applyProfile(percent) {
+    // Charge-limit presets, one libadwaita radio row each in the popup: the
+    // title plus the window the battery is kept in. Windows honour the firmware
+    // rule start <= end - 5 with start >= 50.
+    readonly property var profiles: [
+        {
+            title: "Always plugged",
+            range: "50% \u2013 60%",
+            start: 50,
+            end: 60
+        },
+        {
+            title: "Battery care",
+            range: "70% \u2013 80%",
+            start: 70,
+            end: 80
+        },
+        {
+            title: "Full charge",
+            range: "90% \u2013 100%",
+            start: 90,
+            end: 100
+        }
+    ]
+
+    // Apply a charge window as root. `smbios-battery-ctl` (Dell: SMMBIOS tokens,
+    // the same store the kernel's sysfs thresholds use) sets the custom
+    // interval and switches the firmware to custom mode; machines without the
+    // tool fall back to the sysfs thresholds. The script receives the
+    // paths/values as positional arguments so they are never interpreted by the
+    // shell. Firmware requires start to be at least 5% below end, so when
+    // raising the window the end threshold must be written first (and when
+    // lowering it, the start first); otherwise the intermediate state is
+    // invalid and gets reverted.
+    function applyProfile(profile) {
         if (!root.thresholdSupported)
             return
         root.applyError = ""
-        const start = percent >= 100 ? 95 : Math.max(50, percent - 5)
-        root.pendingStart = start
-        root.pendingEnd = percent
-        const script = "d=\"$1\"; s=\"$2\"; e=\"$3\"; "
-            + "ce=$(cat \"$d/charge_control_end_threshold\" 2>/dev/null || echo 0); "
-            + "if [ \"$e\" -ge \"$ce\" ]; then "
-            + "printf '%s\\n' \"$e\" > \"$d/charge_control_end_threshold\"; "
-            + "printf '%s\\n' \"$s\" > \"$d/charge_control_start_threshold\"; "
-            + "else "
-            + "printf '%s\\n' \"$s\" > \"$d/charge_control_start_threshold\"; "
-            + "printf '%s\\n' \"$e\" > \"$d/charge_control_end_threshold\"; "
-            + "fi"
-        applyProcess.command = ["pkexec", "/bin/sh", "-c", script, "sh",
-            root.sysfsDir, String(start), String(percent)]
+        root.pendingStart = profile.start
+        root.pendingEnd = profile.end
+        let script = "d=\"$1\"; s=\"$2\"; e=\"$3\"; "
+        script += "if command -v smbios-battery-ctl >/dev/null 2>&1"
+        script += " && smbios-battery-ctl --set-custom-charge-interval \"$s\" \"$e\" >/dev/null"
+        script += " && smbios-battery-ctl --set-charging-mode=custom >/dev/null; then exit 0; fi; "
+        script += "ce=$(cat \"$d/charge_control_end_threshold\" 2>/dev/null || echo 0); "
+        script += "if [ \"$e\" -ge \"$ce\" ]; then "
+        script += "printf '%s\\n' \"$e\" > \"$d/charge_control_end_threshold\"; "
+        script += "printf '%s\\n' \"$s\" > \"$d/charge_control_start_threshold\"; "
+        script += "else "
+        script += "printf '%s\\n' \"$s\" > \"$d/charge_control_start_threshold\"; "
+        script += "printf '%s\\n' \"$e\" > \"$d/charge_control_end_threshold\"; "
+        script += "fi"
+        applyProcess.command = ["pkexec", "/bin/sh", "-c", script, "sh", root.sysfsDir, String(profile.start), String(profile.end)]
         applyProcess.running = true
     }
 
@@ -132,57 +154,59 @@ Singleton {
     }
 
     // ------------------------------------------------------------------
-    // power-profiles-daemon profile, native via the PowerProfiles
-    // singleton (no CLI). Button colors: red / blue / green.
+    // sched_ext scheduler (CachyOS scx_loader, no ppd). `scxctl get` prints
+    // "running Bpfland in PowerSave mode"; without scx_loader the raw ops
+    // name from /sys/kernel/sched_ext/root/ops is used instead (version
+    // suffix stripped). Read only on open / refresh: it is not polled.
     // ------------------------------------------------------------------
-    readonly property string powerProfileLabel: {
-        switch (PowerProfiles.profile) {
-        case PowerProfile.Performance:
-            return "Performance"
-        case PowerProfile.PowerSaver:
-            return "Power saver"
-        default:
-            return "Balanced"
-        }
+    // "Bpfland  ·  PowerSave" while a scheduler is attached, "" otherwise.
+    property string schedulerLabel: ""
+    readonly property bool schedulerActive: schedulerLabel !== ""
+
+    function refreshScheduler() {
+        schedulerProcess.running = true
     }
 
-    readonly property color powerProfileColor: {
-        switch (PowerProfiles.profile) {
-        case PowerProfile.Performance:
-            return "#d64545"
-        case PowerProfile.PowerSaver:
-            return "#3fae62"
-        default:
-            return "#3d7fd6"
+    function parseScheduler(text) {
+        const raw = String(text).trim()
+        if (raw === "") {
+            root.schedulerLabel = ""
+            return
         }
+        const running = /running\s+(\S+)\s+in\s+(\S+)\s+mode/i.exec(raw)
+        if (running !== null) {
+            root.schedulerLabel = running[1] + "  ·  " + running[2]
+            return
+        }
+        if (/not running|no scheduler|inactive|stopped|disabled/i.test(raw)) {
+            root.schedulerLabel = ""
+            return
+        }
+        // Kernel ops name: "<name>_<version>_<arch>_<os>_<libc>" -> "<Name>".
+        const short = /^([^_]+)_\d/.exec(raw)
+        const name = short === null ? raw : short[1]
+        root.schedulerLabel = name.charAt(0).toUpperCase() + name.slice(1)
     }
 
-    // Performance -> Balanced -> Power saver -> Performance. Performance is
-    // skipped when the daemon does not expose it (`hasPerformanceProfile`).
-    function cyclePowerProfile() {
-        switch (PowerProfiles.profile) {
-        case PowerProfile.Performance:
-            PowerProfiles.profile = PowerProfile.Balanced
-            break
-        case PowerProfile.Balanced:
-            PowerProfiles.profile = PowerProfile.PowerSaver
-            break
-        default:
-            PowerProfiles.profile = PowerProfiles.hasPerformanceProfile
-                ? PowerProfile.Performance : PowerProfile.Balanced
+    Process {
+        id: schedulerProcess
+        // scxctl only answers while scx_loader runs; otherwise read the kernel
+        // ops name. `timeout` keeps a dead daemon from hanging the popup.
+        command: {
+            let cmd = "out=$(timeout 2 scxctl get 2>/dev/null); "
+            cmd += "[ -n \"$out\" ] && printf '%s' \"$out\" "
+            cmd += "|| cat /sys/kernel/sched_ext/root/ops 2>/dev/null"
+            return ["/bin/sh", "-c", cmd]
+        }
+        stdout: StdioCollector {
+            onStreamFinished: root.parseScheduler(text)
         }
     }
 
     // Battery level icons: index 0..10 (battery0 empty -> battery10 full)
-    readonly property var batteryGlyphs: [
-        "\ue000", "\ue002", "\ue003", "\ue004", "\ue005", "\ue006",
-        "\ue007", "\ue008", "\ue009", "\ue00a", "\ue001"
-    ]
+    readonly property var batteryGlyphs: ["\ue000", "\ue002", "\ue003", "\ue004", "\ue005", "\ue006", "\ue007", "\ue008", "\ue009", "\ue00a", "\ue001"]
     // Charging battery icons: index 0..10 (battery-charge0 -> battery-charge10)
-    readonly property var chargeGlyphs: [
-        "\ue00b", "\ue00d", "\ue00f", "\ue010", "\ue011", "\ue012",
-        "\ue013", "\ue014", "\ue015", "\ue016", "\ue00c"
-    ]
+    readonly property var chargeGlyphs: ["\ue00b", "\ue00d", "\ue00f", "\ue010", "\ue011", "\ue012", "\ue013", "\ue014", "\ue015", "\ue016", "\ue00c"]
 
     // Shown while the charger is connected but the charge has not started yet
     readonly property string saverGlyph: "\ue018"
@@ -233,11 +257,7 @@ Singleton {
 
     Process {
         id: thresholdReader
-        command: ["/bin/sh", "-c",
-            "printf '%s %s' "
-                + "\"$(cat \"$1/charge_control_start_threshold\" 2>/dev/null || echo -1)\" "
-                + "\"$(cat \"$1/charge_control_end_threshold\" 2>/dev/null || echo -1)\"",
-            "sh", root.sysfsDir]
+        command: ["/bin/sh", "-c", "printf '%s %s' " + "\"$(cat \"$1/charge_control_start_threshold\" 2>/dev/null || echo -1)\" " + "\"$(cat \"$1/charge_control_end_threshold\" 2>/dev/null || echo -1)\"", "sh", root.sysfsDir]
         stdout: StdioCollector {
             onStreamFinished: root.parseThresholds(text)
         }

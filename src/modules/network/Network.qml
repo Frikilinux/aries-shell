@@ -28,8 +28,9 @@ Item {
     readonly property bool wiredConnected: NetworkDevices.isUp(activeWired)
     // Carrier present even with no active connection (dimmer, not "off").
     readonly property bool wiredLinked: activeWired !== null && activeWired.hasLink
-    // rfkill switch (sw) or the radio itself (hw) turned off.
-    readonly property bool wifiOff: !Networking.wifiEnabled || !Networking.wifiHardwareEnabled
+    // rfkill switch (sw) or the radio itself (hw) turned off, or the interface
+    // unmanaged (popup switch off -> `nmManaged` false, global wifi still on).
+    readonly property bool wifiOff: !Networking.wifiEnabled || !Networking.wifiHardwareEnabled || (activeWifi !== null && activeWifi.nmManaged === false)
 
     readonly property string wifiGlyph: {
         if (wifiConnected) {
@@ -37,11 +38,13 @@ Item {
             if (n !== null)
                 return NetworkDevices.signalGlyph(n.signalStrength)
         }
+        // Radio off: slashed glyph. Enabled but not associated: the plain wifi
+        // icon (muted by the caller's opacity), no warning triangle.
         if (wifiOff)
             return "\ue067"
         // wifi-off
-        return "\ue069"
-        // wifi-warning (enabled, not connected)
+        return "\ue065"
+        // wifi4
     }
 
     implicitWidth: row.implicitWidth
